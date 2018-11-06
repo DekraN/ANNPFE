@@ -123,7 +123,7 @@ static int train(kann_t *net, float *train_data, int n_train_ex, float lr, int u
 	if((r = (float*)calloc(n_var, sizeof(float))) == NULL) // temporary array for RMSprop
 		return 1;
 
-	ua = kann_unroll(net, ulen);            // unroll; the mini batch size is 1
+	ua = ulen > 1 ? kann_unroll(net, ulen) : net;            // unroll; the mini batch size is 1
 	kann_feed_bind(ua, KANN_F_IN,    0, x); // bind _x_ to input nodes
 	kann_feed_bind(ua, KANN_F_TRUTH, 0, y); // bind _y_ to truth nodes
 	kann_set_batch_size(ua, mbs);
@@ -139,7 +139,7 @@ static int train(kann_t *net, float *train_data, int n_train_ex, float lr, int u
 		int nelem = 0;
 		double train_cost = 0.0;
 		int train_tot = 0, val_tot =0, n_cerr = 0;
-		for (j = 0; j + ulen * mbs < n_train_ex; j += ulen * mbs)
+		for (j = 0; j < n_train_ex; j += ulen * mbs)
 		{
 
 			for (b = 0; b < mbs; ++b)
@@ -176,7 +176,8 @@ static int train(kann_t *net, float *train_data, int n_train_ex, float lr, int u
 	
 
  	free(y); free(x);
-	kann_delete_unrolled(ua); // for an unrolled network, don't use kann_delete()!
+	if(ulen > 1)
+		kann_delete_unrolled(ua); // for an unrolled network, don't use kann_delete()!
 	free(r);
 	return 0;
 }
@@ -262,7 +263,7 @@ int main(int argc, char *argv[])
 {
 	int i;
 	kann_t *ann = NULL;
-	char *fn_in, *fn_out = 0;
+	char *fn_in = NET_BINARY_NAME, *fn_out = 0;
 	float lr, dropout, t_idx;
 	const unsigned char to_apply = argc > 1;
 	int n_h_layers, n_h_neurons, mini_size, max_epoch, norm, n_threads, seed;
@@ -280,7 +281,9 @@ int main(int argc, char *argv[])
 		norm = argc > 8 ? atoi(argv[8]) : L_NORM;
 		n_threads = argc > 9 ? atoi(argv[9]) : N_THREADS;
 		seed = argc > 10 ? atoi(argv[10]) : RANDOM_SEED;
-		fn_in = argc > 11 ? argv[11] : NET_BINARY_NAME;
+
+		if(argc > 11)
+			fn_in = argv[11];
 	}
 
 	(void) signal(SIGINT, sigexit);
@@ -295,7 +298,7 @@ int main(int argc, char *argv[])
 	{
 		output_feature_min[i] = MIN(train_data, N_SAMPLES_PER_POINT* (N_FEATURES+N_DIM_OUT), i, (N_FEATURES+N_DIM_OUT));
 		output_feature_max[i] = MAX(train_data, N_SAMPLES_PER_POINT* (N_FEATURES+N_DIM_OUT), i, (N_FEATURES+N_DIM_OUT)); 
-		if(output_feature_min == output_feature_max && (output_feature_min[i] == 1.00f || !output_feature_min[i]))
+		if(output_feature_min[i] == output_feature_max[i] && (output_feature_min[i] == 1.00f || !output_feature_min[i]))
 			continue;
 		 printf("i is %d, outmin: %g, outmax: %g\n", i, output_feature_min[i], output_feature_max[i]);
 		normalize_minmax(train_data, N_SAMPLES_PER_POINT*(N_FEATURES+N_DIM_OUT), i, (N_FEATURES+N_DIM_OUT), output_feature_min[i], output_feature_max[i], 0.00f, 1.00f);
@@ -320,14 +323,14 @@ int main(int argc, char *argv[])
 
 		ann = kann_new(kann_layer_cost(t, N_DIM_OUT, KANN_C_MSE), 0);
 		train(ann, train_data, (int)(TRAINING_IDX*N_SAMPLES_PER_POINT), lr, N_TIMESTEPS, mini_size, max_epoch, n_threads); // max_epoch);
-		kann_save(NET_BINARY_NAME, ann);
+		kann_save(fn_in, ann);
 		printf("\ntraining succeeded\n");
 		
 	}
 	else
 	{
 		double tot_cost = 0.00;
-		ann = kann_load(NET_BINARY_NAME);
+		ann = kann_load(fn_in);
 
 		printf("\nTEST...\n");
 		//test(ann, train_data, N_SAMPLES_PER_POINT, &tot_cost, output_feature_min, output_feature_max, 0.00f, 1.00f);
