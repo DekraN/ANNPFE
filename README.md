@@ -3,4 +3,4 @@
 
 Simply compile a dataset like a C array as in the example (first columns are the outputs, other are inputs), then:
   
-<code>./annpfe [n_h_layers] [n_h_neurons] [minibatch_size] [max_epoch] [learning_rate] [dropout] [training_idx] [want_layer_normalization] [n_threads] [random_seed] [network_name]</code>
+<code>./annpfe [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [n_h_layers] [n_h_neurons] [minibatch_size] [max_epoch] [learning_rate] [dropout] [training_idx] [validation_idx] [want_layer_normalization] [n_threads] [random_seed]</code>
