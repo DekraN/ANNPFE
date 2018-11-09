@@ -7,7 +7,7 @@
 #               Gabriele Accarino    @ UNISALENTO & CMCC        #
 #                      marco_chiarelli@yahoo.it                 #
 #                      marco.chiarelli@cmcc.it                  #
-#                     gabriele.accarino@cmcc.it                	#
+#                     gabriele.accarino@cmcc.it                 #
 #################################################################
 */
 
@@ -48,7 +48,7 @@
 #define TRAINING_DESC stderr
 #define ERROR_DESC stderr
 #define NET_BINARY_NAME "kann_net.bin"
-#define POINT_HEADER "point_5_7_10_neighbours.h" // "test_dataset.h" // _masks.h"
+#define POINT_HEADER "test_dataset.h" // _masks.h"
 #define PREDICTIONS_NAME "predictions.csv"
 
 #define N_SAMPLES_PER_POINT 50000
