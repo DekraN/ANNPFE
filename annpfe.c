@@ -48,7 +48,7 @@
 #define TRAINING_DESC stderr
 #define ERROR_DESC stderr
 #define NET_BINARY_NAME "kann_net.bin"
-#define POINT_HEADER "test_dataset.h"
+#define POINT_HEADER "point_5_7_10_neighbours.h" // "test_dataset.h" // _masks.h"
 #define PREDICTIONS_NAME "predictions.csv"
 
 #define N_SAMPLES_PER_POINT 50000
@@ -376,7 +376,7 @@ int main(int argc, char *argv[])
 	float lr, dropout, t_idx, val_idx;
 	float feature_scaling_min, feature_scaling_max;
 	const unsigned char to_apply = argc > 7;
-	int n_h_layers, n_h_neurons, mini_size, max_epoch, t_method, stdnorm, l_norm, n_threads, seed;
+	int n_h_layers, n_h_neurons, mini_size, timesteps, max_epoch, t_method, stdnorm, l_norm, n_threads, seed;
 
 	printf("\n\n#################################################################\n");
 	printf("#   ANNPFE - Artificial Neural Network Prototyping Front-End    #\n");
@@ -393,7 +393,7 @@ int main(int argc, char *argv[])
 
 	if(!strcmp(argv[1], "help"))
 	{
-		printf("USAGE: ./annpfe [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [n_h_layers] [n_h_neurons] [minibatch_size] [max_epoch] [learning_rate] [dropout] [training_idx] [validation_idx] [want_layer_normalization] [n_threads] [random_seed]\n");
+		printf("USAGE: ./annpfe [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [n_h_layers] [n_h_neurons] [minibatch_size] [timesteps] [max_epoch] [learning_rate] [dropout] [training_idx] [validation_idx] [want_layer_normalization] [n_threads] [random_seed]\n");
 		printf("Enter executable name without params for testing.\n");	
 		return 2;
 	}
@@ -465,8 +465,16 @@ int main(int argc, char *argv[])
 		fprintf(ERROR_DESC, "Max epoch must be a non-zero positive integer.\n");
 		return 1;	
 	}
+	
+	timesteps = argc > 11 ? atoi(argv[11]) : N_TIMESTEPS;
 
-	lr = argc > 11 ? atof(argv[11]) : LEARNING_RATE;
+	if(timesteps <= 0)
+	{
+		fprintf(ERROR_DESC, "Timesteps must be a non-zero positive integer.\n");
+		return 1;	
+	}
+
+	lr = argc > 12 ? atof(argv[12]) : LEARNING_RATE;
 
 	if(lr <= 0 || lr >= 1.00f)
 	{
@@ -474,7 +482,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	dropout = argc > 12 ? atof(argv[12]) : DROPOUT;
+	dropout = argc > 13 ? atof(argv[13]) : DROPOUT;
 
 	if(dropout < 0 || dropout >= 1.00f)
 	{
@@ -482,7 +490,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	t_idx = argc > 13 ? (atof(argv[13])*0.01f) : TRAINING_IDX;
+	t_idx = argc > 14 ? (atof(argv[14])*0.01f) : TRAINING_IDX;
 
 	if(t_idx <= 0 || t_idx >= 1.00f)
 	{
@@ -490,7 +498,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	val_idx = argc > 14 ? (atof(argv[14])*0.01f) : VALIDATION_IDX;
+	val_idx = argc > 15 ? (atof(argv[15])*0.01f) : VALIDATION_IDX;
 
 	if(val_idx < 0 || val_idx >= 1.00f)
 	{
@@ -504,7 +512,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	l_norm = argc > 15 ? atoi(argv[15]) : L_NORM;
+	l_norm = argc > 16 ? atoi(argv[16]) : L_NORM;
 
 	if(l_norm != 0 && l_norm != 1)
 	{
@@ -512,7 +520,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	n_threads = argc > 16 ? atoi(argv[16]) : N_THREADS;
+	n_threads = argc > 17 ? atoi(argv[17]) : N_THREADS;
 
 	if(n_threads <= 0)
 	{
@@ -520,7 +528,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	seed = argc > 17 ? atoi(argv[17]) : RANDOM_SEED;
+	seed = argc > 18 ? atoi(argv[18]) : RANDOM_SEED;
 
 	(void) signal(SIGINT, sigexit);
 
@@ -618,7 +626,7 @@ int main(int argc, char *argv[])
 
 		ann = kann_new(kann_layer_cost(t, N_DIM_OUT, KANN_C_MSE), 0);
 		printf("\nTRAINING...\n");
-		train(ann, train_data, N_SAMPLES_PER_POINT, lr, N_TIMESTEPS, mini_size, max_epoch, t_idx, val_idx, n_threads); // max_epoch);
+		train(ann, train_data, N_SAMPLES_PER_POINT, lr, timesteps, mini_size, max_epoch, t_idx, val_idx, n_threads); // max_epoch);
 		kann_save(fn_in, ann);
 		printf("\nTraining succeeded!\n");
 		
