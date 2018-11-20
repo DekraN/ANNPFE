@@ -356,7 +356,7 @@ static int test(kann_t *net, float *test_data, int n_test_ex, double *tot_cost, 
 	}
 
 	fclose(fp);
-	*tot_cost = *tot_cost/n_test_ex;
+	*tot_cost = sqrtf(*tot_cost/n_test_ex);
 	printf("Test Ended.\n");
 	cpu_time /= n_test_ex;
 	printf("\nAverage test time: %lf.\n", cpu_time);
@@ -643,7 +643,7 @@ int main(int argc, char *argv[])
 					kann_layer_gru(t, n_h_neurons, rnn_flag);
 					break;
 				case 3:
-					kann_layer_lstm(t, n_h_neurons, rnn_flag)
+					kann_layer_lstm(t, n_h_neurons, rnn_flag);
 					break;
 				default:
 					break;
