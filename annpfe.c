@@ -7,7 +7,7 @@
 #               Gabriele Accarino    @ UNISALENTO & CMCC        #
 #                      marco_chiarelli@yahoo.it                 #
 #                      marco.chiarelli@cmcc.it                  #
-#                     gabriele.accarino@cmcc.it                 #
+#                     gabriele.accarino@cmcc.it                	#
 #################################################################
 */
 
@@ -23,6 +23,7 @@
 
 #include <sys/time.h>
 
+#define NET_TYPE 0
 #define N_H_LAYERS 3
 #define N_NEURONS 120
 #define N_EPOCHS 3000
@@ -48,7 +49,7 @@
 #define TRAINING_DESC stderr
 #define ERROR_DESC stderr
 #define NET_BINARY_NAME "kann_net.bin"
-#define POINT_HEADER "test_dataset.h" // _masks.h"
+#define POINT_HEADER "point_5_7_10_neighbours.h" // "test_dataset.h" // _masks.h"
 #define PREDICTIONS_NAME "predictions.csv"
 
 #define N_SAMPLES_PER_POINT 50000
@@ -287,7 +288,7 @@ static int train(kann_t *net, float *train_data, int n_samples, float lr, int ul
 	return 0;
 }
 
-static int test(kann_t *net, float *test_data, int n_test_ex, double *tot_cost, float *min_x, float *max_x, float *mean, float *std, char * p_name, unsigned char stdnorm, float a, float b)
+static int test(kann_t *net, float *test_data, int n_test_ex, double *tot_cost, float *min_x, float *max_x, float *mean, float *std, char * p_name, unsigned char net_type, unsigned char stdnorm, float a, float b)
 {
 	FILE * fp;
 	int i, j, k, l;
@@ -317,8 +318,10 @@ static int test(kann_t *net, float *test_data, int n_test_ex, double *tot_cost, 
 
 	if((expected = (float*)calloc(n_dim_out, sizeof(float))) == NULL)
 		return 1;
+	
+	if(net_type)
+		kann_rnn_start(net);
 
-	// kann_rnn_start(net);
 	printf("Test Begin\n");
 	printf("Number of ex: %d\n", n_test_ex);
 	fp=fopen(p_name, "w+");
@@ -357,7 +360,10 @@ static int test(kann_t *net, float *test_data, int n_test_ex, double *tot_cost, 
 	printf("Test Ended.\n");
 	cpu_time /= n_test_ex;
 	printf("\nAverage test time: %lf.\n", cpu_time);
-	// kann_rnn_end(net);
+
+	if(net_type)
+		kann_rnn_end(net);
+
 	return 0;
 }
 
@@ -376,7 +382,7 @@ int main(int argc, char *argv[])
 	float lr, dropout, t_idx, val_idx;
 	float feature_scaling_min, feature_scaling_max;
 	const unsigned char to_apply = argc > 7;
-	int n_h_layers, n_h_neurons, mini_size, timesteps, max_epoch, t_method, stdnorm, l_norm, n_threads, seed;
+	int net_type, n_h_layers, n_h_neurons, mini_size, timesteps, max_epoch, t_method, stdnorm, l_norm, n_threads, seed;
 
 	printf("\n\n#################################################################\n");
 	printf("#   ANNPFE - Artificial Neural Network Prototyping Front-End    #\n");
@@ -393,7 +399,7 @@ int main(int argc, char *argv[])
 
 	if(!strcmp(argv[1], "help"))
 	{
-		printf("USAGE: ./annpfe [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [n_h_layers] [n_h_neurons] [minibatch_size] [timesteps] [max_epoch] [learning_rate] [dropout] [training_idx] [validation_idx] [want_layer_normalization] [n_threads] [random_seed]\n");
+		printf("USAGE: ./annpfe [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [n_h_layers] [n_h_neurons] [minibatch_size] [timesteps] [max_epoch] [learning_rate] [dropout] [training_idx] [validation_idx] [want_layer_normalization] [n_threads] [random_seed]\n");
 		printf("Enter executable name without params for testing.\n");	
 		return 2;
 	}
@@ -432,9 +438,17 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	net_type = argc > 7 ? atoi(argv[7]) : NET_TYPE;	
+
+	if(net_type < 0 || net_type > 2)
+	{
+		fprintf(ERROR_DESC, "Network type must be an integer >= 0 and <= 3.\n");
+		return 1;	
+	}
+
 	// train only parameters
 
-	n_h_layers = argc > 7 ? atoi(argv[7]) : N_H_LAYERS;	
+	n_h_layers = argc > 8 ? atoi(argv[8]) : N_H_LAYERS;	
 
 	if(n_h_layers <= 0)
 	{
@@ -442,7 +456,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	n_h_neurons = argc > 8 ? atoi(argv[8]) : N_NEURONS;
+	n_h_neurons = argc > 9 ? atoi(argv[9]) : N_NEURONS;
 
 	if(n_h_neurons <= 0)
 	{
@@ -450,7 +464,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	mini_size = argc > 9 ? atoi(argv[9]) : N_MINIBATCH;
+	mini_size = argc > 10 ? atoi(argv[10]) : N_MINIBATCH;
 
 	if(mini_size < 1)
 	{
@@ -458,7 +472,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	max_epoch = argc > 10 ? atoi(argv[10]) : N_EPOCHS;
+	max_epoch = argc > 11 ? atoi(argv[11]) : N_EPOCHS;
 
 	if(max_epoch <= 0)
 	{
@@ -466,7 +480,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 	
-	timesteps = argc > 11 ? atoi(argv[11]) : N_TIMESTEPS;
+	timesteps = argc > 12 ? atoi(argv[12]) : N_TIMESTEPS;
 
 	if(timesteps <= 0)
 	{
@@ -474,7 +488,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	lr = argc > 12 ? atof(argv[12]) : LEARNING_RATE;
+	lr = argc > 13 ? atof(argv[13]) : LEARNING_RATE;
 
 	if(lr <= 0 || lr >= 1.00f)
 	{
@@ -482,7 +496,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	dropout = argc > 13 ? atof(argv[13]) : DROPOUT;
+	dropout = argc > 14 ? atof(argv[14]) : DROPOUT;
 
 	if(dropout < 0 || dropout >= 1.00f)
 	{
@@ -490,7 +504,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	t_idx = argc > 14 ? (atof(argv[14])*0.01f) : TRAINING_IDX;
+	t_idx = argc > 15 ? (atof(argv[15])*0.01f) : TRAINING_IDX;
 
 	if(t_idx <= 0 || t_idx >= 1.00f)
 	{
@@ -498,7 +512,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	val_idx = argc > 15 ? (atof(argv[15])*0.01f) : VALIDATION_IDX;
+	val_idx = argc > 16 ? (atof(argv[16])*0.01f) : VALIDATION_IDX;
 
 	if(val_idx < 0 || val_idx >= 1.00f)
 	{
@@ -512,7 +526,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	l_norm = argc > 16 ? atoi(argv[16]) : L_NORM;
+	l_norm = argc > 17 ? atoi(argv[17]) : L_NORM;
 
 	if(l_norm != 0 && l_norm != 1)
 	{
@@ -520,7 +534,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	n_threads = argc > 17 ? atoi(argv[17]) : N_THREADS;
+	n_threads = argc > 18 ? atoi(argv[18]) : N_THREADS;
 
 	if(n_threads <= 0)
 	{
@@ -528,7 +542,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	seed = argc > 18 ? atoi(argv[18]) : RANDOM_SEED;
+	seed = argc > 19 ? atoi(argv[19]) : RANDOM_SEED;
 
 	(void) signal(SIGINT, sigexit);
 
@@ -617,7 +631,7 @@ int main(int argc, char *argv[])
 
 		for (i = 0; i < n_h_layers; ++i)
 		{
-			t = kad_sigm(kann_layer_dense(t, n_h_neurons));
+			t = net_type == 0 ? kad_sigm(kann_layer_dense(t, n_h_neurons)) : net_type == 1 ? kann_layer_rnn(t, n_h_neurons, rnn_flag) : kann_layer_lstm(t, n_h_neurons, rnn_flag);
 			// t = kann_layer_rnn(t, n_h_neurons, rnn_flag);
 			// t = kad_sigm(t);
 			if(dropout)
@@ -639,9 +653,9 @@ int main(int argc, char *argv[])
 		printf("\nTEST...\n");
 
 		if(t_method)
-			test(ann, &train_data[(int)((N_DIM_IN+N_DIM_OUT)*N_SAMPLES_PER_POINT*(t_idx+val_idx))], N_SAMPLES_PER_POINT - (int)(N_SAMPLES_PER_POINT*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, stdnorm, feature_scaling_min, feature_scaling_max);
+			test(ann, &train_data[(int)((N_DIM_IN+N_DIM_OUT)*N_SAMPLES_PER_POINT*(t_idx+val_idx))], N_SAMPLES_PER_POINT - (int)(N_SAMPLES_PER_POINT*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, feature_scaling_min, feature_scaling_max);
 		else
-			test(ann, train_data, N_SAMPLES_PER_POINT, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, stdnorm, feature_scaling_min, feature_scaling_max);	
+			test(ann, train_data, N_SAMPLES_PER_POINT, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, stdnorm, net_type, feature_scaling_min, feature_scaling_max);	
 		
 		printf("\nTest total cost: %g\n", tot_cost);
 	}
