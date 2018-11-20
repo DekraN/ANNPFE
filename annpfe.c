@@ -440,7 +440,7 @@ int main(int argc, char *argv[])
 
 	net_type = argc > 7 ? atoi(argv[7]) : NET_TYPE;	
 
-	if(net_type < 0 || net_type > 2)
+	if(net_type < 0 || net_type > 3)
 	{
 		fprintf(ERROR_DESC, "Network type must be an integer >= 0 and <= 3.\n");
 		return 1;	
@@ -631,9 +631,24 @@ int main(int argc, char *argv[])
 
 		for (i = 0; i < n_h_layers; ++i)
 		{
-			t = net_type == 0 ? kad_sigm(kann_layer_dense(t, n_h_neurons)) : net_type == 1 ? kann_layer_rnn(t, n_h_neurons, rnn_flag) : kann_layer_lstm(t, n_h_neurons, rnn_flag);
-			// t = kann_layer_rnn(t, n_h_neurons, rnn_flag);
-			// t = kad_sigm(t);
+			switch(net_type)
+			{
+				case 0:	
+					t = kad_sigm(kann_layer_dense(t, n_h_neurons));
+					break;
+				case 1:
+					kann_layer_rnn(t, n_h_neurons, rnn_flag);
+					break;
+				case 2:
+					kann_layer_gru(t, n_h_neurons, rnn_flag);
+					break;
+				case 3:
+					kann_layer_lstm(t, n_h_neurons, rnn_flag)
+					break;
+				default:
+					break;
+			}
+
 			if(dropout)
 				t = kann_layer_dropout(t, dropout);
 		}
