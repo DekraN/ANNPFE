@@ -96,7 +96,7 @@ static float MEAN(float a[], int n, int pitch, int max_pitch)
 	int c;
 	float mean = 0.00; 
 
-	for (c = pitch+max_pitch; c+max_pitch < n; c+=max_pitch)	
+	for (c = pitch; c < n; c+=max_pitch)	
 		mean += a[c];
 
 
@@ -109,7 +109,7 @@ static float VARIANCE(float a[], int n, int pitch, int max_pitch)
 	float variance = 0.00;
 	float mean = MEAN(a, n, pitch, max_pitch); 
 
-	for (c = pitch+max_pitch; c+max_pitch < n; c+=max_pitch)	
+	for (c = pitch; c < n; c+=max_pitch)	
 		variance += (a[c]-mean)*(a[c]-mean);
 
 
@@ -125,7 +125,7 @@ static void normalize_minmax(float *vec, int size, int pitch, int max_pitch, flo
 {
 	int i;
 
-	for (i = pitch+max_pitch; i+max_pitch < size; i+=max_pitch)
+	for (i = pitch; i < size; i+=max_pitch)
 		vec[i] = (b - a)*((vec[i] - min_x)/(max_x - min_x)) + a;
 
 }
