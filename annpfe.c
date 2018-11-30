@@ -29,9 +29,17 @@
 #define N_EPOCHS 3000
 #define LEARNING_RATE 0.001f
 #define DROPOUT 0.00f // 0.20f
-#define N_FEATURES 12
+
+#ifndef N_FEATURES
+	#define N_FEATURES 12
+#endif
+
+#ifndef N_DIM_OUT
+	#define N_DIM_OUT 1
+#endif
+
 #define N_DIM_IN N_FEATURES
-#define N_DIM_OUT 1
+
 #define N_TIMESTEPS 1
 #define N_MINIBATCH 1 // ONLINE LEARNING
 #define STDNORM 1
@@ -44,7 +52,7 @@
 
 #define N_LAG 0
 #define TOT_FEATURES (N_DIM_OUT+N_DIM_IN)
-#define DATASET_SIZE TOT_FEATURES*N_SAMPLES_PER_POINT
+#define DATASET_SIZE TOT_FEATURES*N_SAMPLES
 
 #define FEATURE_SCALING_MIN 0.00f
 #define FEATURE_SCALING_MAX 1.00f
@@ -53,11 +61,14 @@
 #define TRAINING_DESC stderr
 #define ERROR_DESC stderr
 #define NET_BINARY_NAME "kann_net.bin"
-#define POINT_HEADER "point_5_7_10_neighbours.h" // "test_dataset.h" // _masks.h"
+#define DATASET "test_dataset.h"
 #define PREDICTIONS_NAME "predictions.csv"
 
-#define N_SAMPLES_PER_POINT 50000
-#include POINT_HEADER
+#ifndef N_SAMPLES
+	#define N_SAMPLES 50000
+#endif
+
+#include DATASET
 
 static unsigned char train_exec = 1;
 
@@ -419,14 +430,14 @@ int main(int argc, char *argv[])
 
 	if(!strcmp(argv[1], "help"))
 	{
-		printf("USAGE: ./annpfe [n_lag] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [n_h_layers] [n_h_neurons] [max_epoch] [minibatch_size] [timesteps] [learning_rate] [dropout] [training_idx[%]] [validation_idx[%]] [want_layer_normalization] [n_threads] [random_seed]\n");
+		printf("USAGE: ./annpfe [n_lag] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [n_h_layers] [n_h_neurons] [max_epoch] [minibatch_size] [timesteps] [learning_rate] [dropout] [training_idx[\%%]] [validation_idx[\%%]] [want_layer_normalization] [n_threads] [random_seed]\n");
 		printf("Enter executable name without params for testing.\n");	
 		return 2;
 	}
 
 	n_lag = argc > 1 ? atoi(argv[1]) : N_LAG;
 
-	if(n_lag < 0 || n_lag > N_SAMPLES_PER_POINT)
+	if(n_lag < 0 || n_lag > N_SAMPLES)
 	{
 		fprintf(ERROR_DESC, "Number of lag must be a positive integer.\n");
 		return 1;	
@@ -586,14 +597,14 @@ int main(int argc, char *argv[])
 	float * train_data = NULL;
 
 	const int tot_features_lag = TOT_FEATURES+n_lag;
-	const int dataset_size = DATASET_SIZE+n_lag*N_SAMPLES_PER_POINT-tot_features_lag*n_lag;
+	const int dataset_size = DATASET_SIZE+n_lag*N_SAMPLES-tot_features_lag*n_lag;
 
 	if(n_lag)
 	{
 		
 		train_data = calloc(dataset_size, sizeof(float));	
 
-		for(i=0; i<N_SAMPLES_PER_POINT-n_lag; ++i)
+		for(i=0; i<N_SAMPLES-n_lag; ++i)
 		{
 			for(j=0; j<n_lag+1; ++j)
 				train_data[i*tot_features_lag + j] = train_data_base[(i+n_lag-j)*TOT_FEATURES];
@@ -704,7 +715,7 @@ int main(int argc, char *argv[])
 
 		ann = kann_new(kann_layer_cost(t, N_DIM_OUT, KANN_C_MSE), 0);
 		printf("\nTRAINING...\n");
-		train(ann, train_data, N_SAMPLES_PER_POINT-n_lag, lr, timesteps, mini_size, max_epoch, t_idx, val_idx, n_threads); // max_epoch);
+		train(ann, train_data, N_SAMPLES-n_lag, lr, timesteps, mini_size, max_epoch, t_idx, val_idx, n_threads); // max_epoch);
 		kann_save(fn_in, ann);
 		printf("\nTraining succeeded!\n");
 		
@@ -717,9 +728,9 @@ int main(int argc, char *argv[])
 		printf("\nTEST...\n");
 
 		if(t_method)
-			test(ann, &train_data[(int)(tot_features_lag*(N_SAMPLES_PER_POINT-n_lag)*(t_idx+val_idx))], N_SAMPLES_PER_POINT - (int)(N_SAMPLES_PER_POINT*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, feature_scaling_min, feature_scaling_max);
+			test(ann, &train_data[(int)(tot_features_lag*(N_SAMPLES-n_lag)*(t_idx+val_idx))], N_SAMPLES - (int)(N_SAMPLES*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, feature_scaling_min, feature_scaling_max);
 		else
-			test(ann, train_data, N_SAMPLES_PER_POINT-n_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, stdnorm, net_type, feature_scaling_min, feature_scaling_max);	
+			test(ann, train_data, N_SAMPLES-n_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, stdnorm, net_type, feature_scaling_min, feature_scaling_max);	
 		
 		printf("\nTest total cost: %g\n", tot_cost);
 	}
