@@ -325,7 +325,11 @@ static int test(kann_t *net, float *test_data, int n_test_ex, double *tot_cost, 
 
 	float (* denorm_function)(register float, float, float, float, float) = denorm_functions[stdnorm]; 
 
+
+	kann_feed_bind(net, KANN_F_IN, 0, &x1);
+	kann_set_batch_size(net, 1);
 	kann_switch(net, 0);
+	out_idx = kann_find(net, KANN_F_OUT, 0);
 
 	if((x1 = (float*)calloc(n_dim_in, sizeof(float))) == NULL)
 		return 1;
@@ -336,8 +340,7 @@ static int test(kann_t *net, float *test_data, int n_test_ex, double *tot_cost, 
 	if(net_type)
 		kann_rnn_start(net);
 
-	kann_feed_bind(net, KANN_F_IN, 0, &x1);
-	out_idx = kann_find(net, KANN_F_OUT, 0);
+	
 	printf("Test Begin\n");
 	printf("Number of ex: %d\n", n_test_ex);
 	fp=fopen(p_name, "w+");
@@ -398,7 +401,7 @@ int main(int argc, char *argv[])
 	char *fn_in = NET_BINARY_NAME, *fn_out = 0;
 	float lr, dropout, t_idx, val_idx;
 	float feature_scaling_min, feature_scaling_max;
-	const unsigned char to_apply = argc > 7;
+	const unsigned char to_apply = argc > 9;
 	int net_type, n_h_layers, n_h_neurons, mini_size, timesteps, max_epoch, t_method, n_lag, stdnorm, l_norm, n_threads, seed;
 
 	printf("\n\n#################################################################\n");
