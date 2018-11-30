@@ -18,17 +18,17 @@
 #include <math.h>
 #include <time.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "kann/kann.h"
 
-#include <sys/time.h>
+#ifndef DATASET
+	#define DATASET "test_dataset.h"
+#endif
 
-#define NET_TYPE 0
-#define N_H_LAYERS 3
-#define N_NEURONS 120
-#define N_EPOCHS 3000
-#define LEARNING_RATE 0.001f
-#define DROPOUT 0.00f // 0.20f
+#ifndef N_SAMPLES
+	#define N_SAMPLES 50000
+#endif
 
 #ifndef N_FEATURES
 	#define N_FEATURES 12
@@ -38,8 +38,13 @@
 	#define N_DIM_OUT 1
 #endif
 
+#define NET_TYPE 0
+#define N_H_LAYERS 3
+#define N_NEURONS 120
+#define N_EPOCHS 3000
+#define LEARNING_RATE 0.001f
+#define DROPOUT 0.00f // 0.20f
 #define N_DIM_IN N_FEATURES
-
 #define N_TIMESTEPS 1
 #define N_MINIBATCH 1 // ONLINE LEARNING
 #define STDNORM 1
@@ -49,7 +54,6 @@
 #define TRAINING_IDX 0.7f
 #define VALIDATION_IDX 0.1f
 #define TESTING_METHOD 1
-
 #define N_LAG 0
 #define TOT_FEATURES (N_DIM_OUT+N_DIM_IN)
 #define DATASET_SIZE TOT_FEATURES*N_SAMPLES
@@ -61,12 +65,7 @@
 #define TRAINING_DESC stderr
 #define ERROR_DESC stderr
 #define NET_BINARY_NAME "kann_net.bin"
-#define DATASET "test_dataset.h"
 #define PREDICTIONS_NAME "predictions.csv"
-
-#ifndef N_SAMPLES
-	#define N_SAMPLES 50000
-#endif
 
 #include DATASET
 
