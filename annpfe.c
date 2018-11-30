@@ -1,7 +1,7 @@
 /*
 #################################################################
 #   ANNPFE - Artificial Neural Network Prototyping Front-End    #
-#             Final Built, v0.1 - 08/11/2018                    #
+#             Final Built, v0.1 - 30/11/2018                    #
 #                    Authors/Developer:                         #
 #             Marco Chiarelli        @ UNISALENTO & CMCC        #
 #               Gabriele Accarino    @ UNISALENTO & CMCC        #
@@ -416,7 +416,7 @@ int main(int argc, char *argv[])
 
 	printf("\n\n#################################################################\n");
 	printf("#   ANNPFE - Artificial Neural Network Prototyping Front-End    #\n");
-	printf("#             Final Built, v0.1 - 08/11/2018                    #\n");
+	printf("#             Final Built, v0.1 - 30/11/2018                    #\n");
 	printf("#                    Authors/Developer:                         #\n");
 	printf("#             Marco Chiarelli        @ UNISALENTO & CMCC        #\n");
 	printf("#               Gabriele Accarino    @ UNISALENTO & CMCC        #\n");
