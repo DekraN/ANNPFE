@@ -416,7 +416,7 @@ int main(int argc, char *argv[])
 
 	if(!strcmp(argv[1], "help"))
 	{
-		printf("USAGE: ./annpfe [n_lag] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [n_h_layers] [n_h_neurons] [minibatch_size] [timesteps] [max_epoch] [learning_rate] [dropout] [training_idx] [validation_idx] [want_layer_normalization] [n_threads] [random_seed]\n");
+		printf("USAGE: ./annpfe [n_lag] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [n_h_layers] [n_h_neurons] [max_epoch] [minibatch_size] [timesteps] [learning_rate] [dropout] [training_idx[%]] [validation_idx[%]] [want_layer_normalization] [n_threads] [random_seed]\n");
 		printf("Enter executable name without params for testing.\n");	
 		return 2;
 	}
@@ -489,19 +489,20 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	mini_size = argc > 11 ? atoi(argv[11]) : N_MINIBATCH;
-
-	if(mini_size < 1)
-	{
-		fprintf(ERROR_DESC, "Minibatch size must be an integer >= 1.\n");
-		return 1;	
-	}
-
-	max_epoch = argc > 12 ? atoi(argv[12]) : N_EPOCHS;
+	max_epoch = argc > 11 ? atoi(argv[11]) : N_EPOCHS;
 
 	if(max_epoch <= 0)
 	{
 		fprintf(ERROR_DESC, "Max epoch must be a non-zero positive integer.\n");
+		return 1;	
+	}
+
+
+	mini_size = argc > 12 ? atoi(argv[12]) : N_MINIBATCH;
+
+	if(mini_size < 1)
+	{
+		fprintf(ERROR_DESC, "Minibatch size must be an integer >= 1.\n");
 		return 1;	
 	}
 	
