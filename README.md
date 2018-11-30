@@ -1,7 +1,10 @@
 # ANNPFE
 <b>Artificial Neural Network Prototyping Front-End</b>
 
-COMPILE: gcc -O3 -march=native annpfe.c kann/kann.c kann/kautodiff.c -lm -o annpfe
+COMPILE:
+<code>
+  gcc -O3 -march=native annpfe.c kann/kann.c kann/kautodiff.c -lm -o annpfe
+</code>
 
 Simply compile a dataset like a C array as in the example (first columns are the outputs, other are inputs), then, open run_annpfe.sh and manually edit bash input variables or directly launch annpfe from command line:
 
