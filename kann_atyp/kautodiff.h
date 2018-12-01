@@ -73,8 +73,8 @@ typedef struct kad_node_t {
 	int32_t     d[KAD_MAX_DIM]; /* dimensions */
 	int32_t     ext_label;      /* labels for external uses (not modified by the kad_* APIs) */
 	uint32_t    ext_flag;       /* flags for external uses (not modified by the kad_* APIs) */
-	float      *x;              /* value; allocated for internal nodes */
-	float      *g;              /* gradient; allocated for internal nodes */
+	atyp      *x;              /* value; allocated for internal nodes */
+	atyp      *g;              /* gradient; allocated for internal nodes */
 	void       *ptr;            /* for special operators that need additional parameters (e.g. conv2d) */
 	void       *gtmp;           /* temporary data generated at the forward pass but used at the backward pass */
 	struct kad_node_t **child;  /* operands/child nodes */
@@ -109,7 +109,7 @@ void kad_delete(int n, kad_node_t **a); /* deallocate a compiled/linearized grap
  * @return a pointer to the value (pointing to kad_node_t::x, so don't call
  *         free() on it!)
  */
-const float *kad_eval_at(int n, kad_node_t **a, int from);
+const atyp *kad_eval_at(int n, kad_node_t **a, int from);
 
 void kad_eval_marked(int n, kad_node_t **a);
 int kad_sync_dim(int n, kad_node_t **v, int batch_size);
@@ -139,8 +139,8 @@ int kad_n_pivots(int n_v, kad_node_t **v);
 kad_node_t **kad_clone(int n, kad_node_t **v, int batch_size);
 
 /* define a variable, a constant or a feed (placeholder in TensorFlow) */
-kad_node_t *kad_var(float *x, float *g, int n_d, ...); /* a variable; gradients to be computed; not unrolled */
-kad_node_t *kad_const(float *x, int n_d, ...);         /* a constant; no gradients computed; not unrolled */
+kad_node_t *kad_var(atyp *x, atyp *g, int n_d, ...); /* a variable; gradients to be computed; not unrolled */
+kad_node_t *kad_const(atyp *x, int n_d, ...);         /* a constant; no gradients computed; not unrolled */
 kad_node_t *kad_feed(int n_d, ...);                    /* an input/output; no gradients computed; unrolled */
 
 /* operators taking two operands */
@@ -214,7 +214,7 @@ void kad_srand(void *d, uint64_t seed);
 uint64_t kad_rand(void *d);
 double kad_drand(void *d);
 double kad_drand_normal(void *d);
-void kad_saxpy(int n, float a, const float *x, float *y);
+void kad_saxpy(int n, atyp a, const atyp *x, atyp *y);
 
 /* debugging routines */
 void kad_trap_fe(void); /* abort on divide-by-zero and NaN */

@@ -21,7 +21,8 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include "kann/kann.h"
+#include "inter_h.h"
+#include "kann_atyp/kann.h"
 
 #ifndef DATASET
 	#define DATASET "test_dataset.h"
@@ -89,6 +90,7 @@ enum
 	NOERROR,
 	ERROR_FILE,
 	ERROR_MEMORY,
+	ERROR_SYNTAX,
 	ERROR_UNKNOWN
 };
 
@@ -119,10 +121,10 @@ static float MIN(float a[], int n, int pitch, int max_pitch)
 	return min;
 }
 
-static float MAX(float a[], int n, int pitch, int max_pitch)
+static atyp MAX(atyp a[], int n, int pitch, int max_pitch)
 {
 	int c, index;
-	float max = a[pitch];
+	atyp max = a[pitch];
 
 	index = pitch;
 
@@ -136,10 +138,10 @@ static float MAX(float a[], int n, int pitch, int max_pitch)
 	return max;
 }
 
-static float MEAN(float a[], int n, int pitch, int max_pitch)
+static atyp MEAN(atyp a[], int n, int pitch, int max_pitch)
 {
 	int c;
-	float mean = 0.00; 
+	atyp mean = 0.00; 
 
 	for (c = pitch; c < n; c+=max_pitch)	
 		mean += a[c];
@@ -148,11 +150,11 @@ static float MEAN(float a[], int n, int pitch, int max_pitch)
 	return mean / n;
 }
 
-static float VARIANCE(float a[], int n, int pitch, int max_pitch)
+static atyp VARIANCE(atyp a[], int n, int pitch, int max_pitch)
 {
 	int c;
-	float variance = 0.00;
-	float mean = MEAN(a, n, pitch, max_pitch); 
+	atyp variance = 0.00;
+	atyp mean = MEAN(a, n, pitch, max_pitch); 
 
 	for (c = pitch; c < n; c+=max_pitch)	
 		variance += (a[c]-mean)*(a[c]-mean);
@@ -161,12 +163,12 @@ static float VARIANCE(float a[], int n, int pitch, int max_pitch)
 	return variance / n;
 }
 
-static inline float STD(float a[], int n, int pitch, int max_pitch)
+static inline atyp STD(atyp a[], int n, int pitch, int max_pitch)
 {
 	return sqrtf(VARIANCE(a, n, pitch, max_pitch));
 }
 
-static void normalize_minmax(float *vec, int size, int pitch, int max_pitch, float min_x, float max_x, float a, float b)
+static void normalize_minmax(atyp *vec, int size, int pitch, int max_pitch, float min_x, atyp max_x, atyp a, float b)
 {
 	int i;
 
@@ -175,7 +177,7 @@ static void normalize_minmax(float *vec, int size, int pitch, int max_pitch, flo
 
 }
 
-static void normalize_std(float *vec, int size, int pitch, int max_pitch, float mean, float var, float unused1, float unused2)
+static void normalize_std(atyp *vec, int size, int pitch, int max_pitch, atyp mean, atyp var, atyp unused1, atyp unused2)
 {
 	#pragma unused unused1
 	#pragma unused unused2
@@ -186,7 +188,7 @@ static void normalize_std(float *vec, int size, int pitch, int max_pitch, float 
 
 }
 
-static inline float identity_denormalize(register float y, float min_x, float max_x, float a, float b)
+static inline atyp identity_denormalize(register atyp y, atyp min_x, atyp max_x, atyp a, atyp b)
 {
 	#pragma unused min_x
 	#pragma unused max_x
@@ -195,24 +197,24 @@ static inline float identity_denormalize(register float y, float min_x, float ma
 	return y;
 }
 
-static inline float minmax_denormalize(register float y, float min_x, float max_x, float a, float b)
+static inline atyp minmax_denormalize(register atyp y, atyp min_x, atyp max_x, atyp a, atyp b)
 {
 	return ((y-a)/(b-a))*(max_x-min_x) + min_x;
 }
 
-static inline float z_unscoring(register float y, float mean, float var, float a, float b)
+static inline float z_unscoring(register atyp y, atyp mean, atyp var, atyp a, atyp b)
 {
 	#pragma unused a
 	#pragma unused b
 	return y*var + mean;
 }
 
-static int train(kann_t *net, float *train_data, int n_samples, float lr, int ulen, int mbs, int max_epoch, double break_score, float train_idx, float val_idx, int n_threads, unsigned char metrics)
+static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ulen, int mbs, int max_epoch, double break_score, float train_idx, float val_idx, int n_threads, unsigned char metrics)
 {
 	int k;
 	kann_t *ua;
-	float *r;
-	float **x, **y;
+	atyp *r;
+	atyp **x, **y;
 	float best_cost = 1e30f;
 	struct timeval tp;
 	int n_var = kann_size_var(net); 
@@ -224,13 +226,13 @@ static int train(kann_t *net, float *train_data, int n_samples, float lr, int ul
 
 	FILE *train_fd, *val_fd;
 
-	if((x = (float**)calloc(ulen, sizeof(float*))) == NULL) // an unrolled has _ulen_ input nodes
+	if((x = (atyp**)calloc(ulen, sizeof(atyp*))) == NULL) // an unrolled has _ulen_ input nodes
 	{
 		fprintf(ERROR_DESC, "Memory error on input vector allocation.\n");
 		return ERROR_MEMORY; 
 	}
 
-	if((y = (float**)calloc(ulen, sizeof(float*))) == NULL) // ... and _ulen_ truth nodes
+	if((y = (atyp**)calloc(ulen, sizeof(atyp*))) == NULL) // ... and _ulen_ truth nodes
 	{
 		free(x);
 		fprintf(ERROR_DESC, "Memory error on output vector allocation.\n");
@@ -239,7 +241,7 @@ static int train(kann_t *net, float *train_data, int n_samples, float lr, int ul
 
 	for (k = 0; k < ulen; ++k)
 	{
-		if((x[k] = (float*)calloc(n_dim_in * mbs, sizeof(float))) == NULL) // each input node takes a (1,n_dim_in) 2D array
+		if((x[k] = (atyp*)calloc(n_dim_in * mbs, sizeof(atyp))) == NULL) // each input node takes a (1,n_dim_in) 2D array
 		{
 			while(--k)
 				free(x[k]), free(y[k]);
@@ -248,7 +250,7 @@ static int train(kann_t *net, float *train_data, int n_samples, float lr, int ul
 			return ERROR_MEMORY; 
 		}
 			
-		if((y[k] = (float*)calloc(n_dim_out * mbs, sizeof(float))) == NULL) // ... where 1 is the mini-batch size
+		if((y[k] = (atyp*)calloc(n_dim_out * mbs, sizeof(atyp))) == NULL) // ... where 1 is the mini-batch size
 		{
 			free(x[k]);
 			while(--k)
@@ -332,8 +334,8 @@ static int train(kann_t *net, float *train_data, int n_samples, float lr, int ul
 			{ // loop through a mini-batch
 				for (k = 0; k < ulen; ++k)
 				{
-					memset(x[k], 0, n_dim_in * mbs * sizeof(float));
-					memset(y[k], 0, n_dim_out * mbs * sizeof(float));
+					memset(x[k], 0, n_dim_in * mbs * sizeof(atyp));
+					memset(y[k], 0, n_dim_out * mbs * sizeof(atyp));
 
 					for (l = n_dim_out; l < n_dim_in+n_dim_out; ++l)
 						x[k][b * n_dim_in + l-n_dim_out] = train_data[(j + b*ulen + k)*(n_dim_in+n_dim_out) + l] ;
@@ -350,7 +352,7 @@ static int train(kann_t *net, float *train_data, int n_samples, float lr, int ul
 			}
 			
 			for (k = 0; k < n_var; ++k)
-				ua->g[k] /= (double) mbs; // gradients are the average of this mini batch
+				ua->g[k] /= (atyp) mbs; // gradients are the average of this mini batch
 			
 			kann_RMSprop(n_var, lr, 0, 0.9f, ua->g, ua->x, r); // update all variables
 
@@ -365,8 +367,8 @@ static int train(kann_t *net, float *train_data, int n_samples, float lr, int ul
 			{ // loop through a mini-batch
 				for (k = 0; k < ulen; ++k)
 				{
-					memset(x[k], 0, n_dim_in * mbs * sizeof(float));
-					memset(y[k], 0, n_dim_out * mbs * sizeof(float));
+					memset(x[k], 0, n_dim_in * mbs * sizeof(atyp));
+					memset(y[k], 0, n_dim_out * mbs * sizeof(atyp));
 
 					for (l = n_dim_out; l < n_dim_in+n_dim_out; ++l)
 						x[k][b * n_dim_in + l-n_dim_out] = train_data[(j + n_train_ex + b*ulen + k)*(n_dim_in+n_dim_out) + l] ;
@@ -434,38 +436,38 @@ static int train(kann_t *net, float *train_data, int n_samples, float lr, int ul
 	return NOERROR;
 }
 
-static int test(kann_t *net, float *test_data, int n_test_ex, double *tot_cost, float *min_x, float *max_x, float *mean, float *std, char * p_name, unsigned char net_type, unsigned char stdnorm, unsigned char metrics, float a, float b)
+static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, atyp *min_x, atyp *max_x, atyp *mean, atyp *std, char * p_name, unsigned char net_type, unsigned char stdnorm, unsigned char metrics, atyp a, atyp b)
 {
 	int i, j, k, l;
 	struct timeval tp;
 	FILE * fp, * err_fd;
-	float y1_denorm;
+	atyp y1_denorm;
 	double elaps = 0.00;
 	double cur_cost = 0.00;
 	int out_idx;
 	int n_dim_in = kann_dim_in(net);
 	int n_dim_out = kann_dim_out(net);
-	float *x1;
-	float *expected;
-	const float *y1;
+	atyp *x1;
+	atyp *expected;
+	const atyp *y1;
 
 
-	static const float (* const denorm_functions[3])(register float, float, float, float, float) =
+	static const atyp (* const denorm_functions[3])(register atyp, atyp, atyp, atyp, atyp) =
 	{
 		identity_denormalize,
 		minmax_denormalize,
 		z_unscoring
 	};
 
-	float (* denorm_function)(register float, float, float, float, float) = denorm_functions[stdnorm]; 
+	atyp (* denorm_function)(register atyp, atyp, atyp, atyp, atyp) = denorm_functions[stdnorm]; 
 
-	if((x1 = (float*)calloc(n_dim_in, sizeof(float))) == NULL)
+	if((x1 = (atyp*)calloc(n_dim_in, sizeof(atyp))) == NULL)
 	{
 		fprintf(ERROR_DESC, "Memory error on input vector allocation.\n");
 		return ERROR_MEMORY; 
 	}
 
-	if((expected = (float*)calloc(n_dim_out, sizeof(float))) == NULL)
+	if((expected = (atyp*)calloc(n_dim_out, sizeof(atyp))) == NULL)
 	{
 		free(x1);
 		fprintf(ERROR_DESC, "Memory error on expected vector allocation.\n");
@@ -556,13 +558,14 @@ static void sigexit(int sign)
 
 int main(int argc, char *argv[])
 {
+	
 	int i, j;
 	kann_t *ann = NULL;
 	double break_score;
 	char *p_name = PREDICTIONS_NAME;
 	char *fn_in = NET_BINARY_NAME, *fn_out = 0;
 	float lr, dropout, t_idx, val_idx;
-	float feature_scaling_min, feature_scaling_max;
+	atyp feature_scaling_min, feature_scaling_max;
 	const unsigned char to_apply = argc > 10;
 	int net_type, metrics, n_h_layers, n_h_neurons, mini_size, timesteps, max_epoch, t_method, n_lag, stdnorm, l_norm, n_threads, seed;
 
@@ -688,7 +691,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	lr = argc > 15 ? atof(argv[15]) : LEARNING_RATE;
+	lr = argc > 15 ? ((float) atof(argv[15])) : LEARNING_RATE;
 
 	if(lr <= 0 || lr >= 1.00f)
 	{
@@ -696,7 +699,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	dropout = argc > 16 ? atof(argv[16]) : DROPOUT;
+	dropout = argc > 16 ? ((float) atof(argv[16])) : DROPOUT;
 
 	if(dropout < 0 || dropout >= 1.00f)
 	{
@@ -704,7 +707,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	break_score = argc > 17 ? atof(argv[17]) : BREAK_SCORE;
+	break_score = argc > 17 ? ((float) atof(argv[17])) : BREAK_SCORE;
 
 	if(break_score < 0)
 	{
@@ -712,7 +715,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	t_idx = argc > 18 ? (atof(argv[18])*0.01f) : TRAINING_IDX;
+	t_idx = argc > 18 ? ((float)atof(argv[18])*0.01f) : TRAINING_IDX;
 
 	if(t_idx <= 0 || t_idx >= 1.00f)
 	{
@@ -720,7 +723,7 @@ int main(int argc, char *argv[])
 		return 1;	
 	}
 
-	val_idx = argc > 19 ? (atof(argv[19])*0.01f) : VALIDATION_IDX;
+	val_idx = argc > 19 ? ((float)atof(argv[19])*0.01f) : VALIDATION_IDX;
 
 	if(val_idx < 0 || val_idx >= 1.00f)
 	{
@@ -757,12 +760,12 @@ int main(int argc, char *argv[])
 	kad_trap_fe();
 	kann_srand(seed);
 
-	float output_feature_a[N_DIM_OUT+N_DIM_IN+n_lag];
-	float output_feature_b[N_DIM_OUT+N_DIM_IN+n_lag];
+	atyp output_feature_a[N_DIM_OUT+N_DIM_IN+n_lag];
+	atyp output_feature_b[N_DIM_OUT+N_DIM_IN+n_lag];
 	
-	float * output_feature_c = NULL;
-	float * output_feature_d = NULL;
-	float * train_data = NULL;
+	atyp * output_feature_c = NULL;
+	atyp * output_feature_d = NULL;
+	atyp * train_data = NULL;
 
 	const int tot_features_lag = TOT_FEATURES+n_lag;
 	const int dataset_size = DATASET_SIZE+n_lag*N_SAMPLES-tot_features_lag*n_lag;
@@ -770,7 +773,7 @@ int main(int argc, char *argv[])
 	if(n_lag)
 	{
 		
-		train_data = calloc(dataset_size, sizeof(float));	
+		train_data = calloc(dataset_size, sizeof(atyp));	
 
 		for(i=0; i<N_SAMPLES-n_lag; ++i)
 		{
@@ -786,7 +789,7 @@ int main(int argc, char *argv[])
 	if(stdnorm)
 		if(stdnorm != 3)
 		{
-			float (* const norm_functions[2][2])(float [], int, int, int) =
+			atyp (* const norm_functions[2][2])(atyp [], int, int, int) =
 			{	
 				{
 					MIN,	
@@ -798,7 +801,7 @@ int main(int argc, char *argv[])
 				}
 			};
 
-			void (* const norm_routine[2])(float *, int, int, int, float, float, float, float) =
+			void (* const norm_routine[2])(atyp *, int, int, int, atyp, atyp, atyp, atyp) =
 			{
 				normalize_minmax,
 				normalize_std
@@ -828,8 +831,8 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
-			output_feature_c = calloc(N_DIM_IN+N_DIM_OUT+n_lag, sizeof(float));
-			output_feature_d = calloc(N_DIM_IN+N_DIM_OUT+n_lag, sizeof(float));
+			output_feature_c = calloc(N_DIM_IN+N_DIM_OUT+n_lag, sizeof(atyp));
+			output_feature_d = calloc(N_DIM_IN+N_DIM_OUT+n_lag, sizeof(atyp));
 
 			for(i=tot_features_lag-1; i>=0; --i)
 			{
@@ -881,24 +884,23 @@ int main(int argc, char *argv[])
 
 		ann = kann_new(kann_layer_cost(t, N_DIM_OUT, KANN_C_MSE), 0);
 		printf("\nTRAINING...\n");
-		train(ann, train_data, N_SAMPLES-n_lag, lr, net_type ? timesteps : 1, mini_size, max_epoch, break_score, t_idx, val_idx, n_threads, metrics); // max_epoch);
-		kann_save(fn_in, ann);
-		printf("\nTraining succeeded!\n");
+		if(!train(ann, train_data, N_SAMPLES-n_lag, lr, net_type ? timesteps : 1, mini_size, max_epoch, break_score, t_idx, val_idx, n_threads, metrics)) 
+		{
+			kann_save(fn_in, ann);
+			printf("\nTraining succeeded!\n");
+		}
 		
 	}
 	else
 	{
 		double tot_cost = 0.00;
-
 		ann = kann_load(fn_in);
 		printf("\nTEST...\n");
 
-		if(t_method)
-			test(ann, &train_data[(int)(tot_features_lag*(N_SAMPLES-n_lag)*(t_idx+val_idx))], N_SAMPLES - (int)(N_SAMPLES*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max);
-		else
-			test(ann, train_data, N_SAMPLES-n_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max);	
-		
-		printf("\nTest total cost: %g\n", tot_cost);
+		const int exit_code = t_method ? test(ann, &train_data[(int)(tot_features_lag*(N_SAMPLES-n_lag)*(t_idx+val_idx))], N_SAMPLES - (int)(N_SAMPLES*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max) : test(ann, train_data, N_SAMPLES-n_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max);	
+
+		if(!exit_code) 		
+			printf("\nTest total cost: %g\n", tot_cost);
 	}
 
 	kann_delete(ann);

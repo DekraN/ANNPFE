@@ -2,8 +2,9 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <string.h>
-#include <float.h>
+#include <atyp.h>
 #include <math.h>
+#include "../inter_h.h"
 #include "kautodiff.h"
 
 typedef struct {
@@ -27,7 +28,7 @@ static inline kad_node_t *kad_new_core(int n_d, int op, int n_child)
 	return s;
 }
 
-static inline kad_node_t *kad_vleaf(uint8_t flag, float *x, float *g, int n_d, va_list ap)
+static inline kad_node_t *kad_vleaf(uint8_t flag, atyp *x, atyp *g, int n_d, va_list ap)
 {
 	int i;
 	kad_node_t *p;
@@ -40,7 +41,7 @@ static inline kad_node_t *kad_vleaf(uint8_t flag, float *x, float *g, int n_d, v
 	return p;
 }
 
-kad_node_t *kad_const(float *x, int n_d, ...)
+kad_node_t *kad_const(atyp *x, int n_d, ...)
 {
 	kad_node_t *p;
 	va_list ap;
@@ -56,7 +57,7 @@ kad_node_t *kad_feed(int n_d, ...)
 	return p;
 }
 
-kad_node_t *kad_var(float *x, float *g, int n_d, ...)
+kad_node_t *kad_var(atyp *x, atyp *g, int n_d, ...)
 {
 	kad_node_t *p;
 	va_list ap;
@@ -382,9 +383,9 @@ static void kad_allocate_internal(int n, kad_node_t **v)
 	for (i = 0; i < n; ++i) {
 		kad_node_t *p = v[i];
 		if (p->n_child == 0) continue;
-		p->x = (float*)realloc(p->x, kad_len(p) * sizeof(float));
+		p->x = (atyp*)realloc(p->x, kad_len(p) * sizeof(atyp));
 		if (kad_is_back(p)) {
-			p->g = (float*)realloc(p->g, kad_len(p) * sizeof(float));
+			p->g = (atyp*)realloc(p->g, kad_len(p) * sizeof(atyp));
 			kad_op_list[p->op](p, KAD_ALLOC);
 		}
 	}
@@ -553,7 +554,7 @@ void kad_eval_marked(int n, kad_node_t **a)
 	for (i = 0; i < n; ++i) a[i]->tmp = 0;
 }
 
-const float *kad_eval_at(int n, kad_node_t **a, int from)
+const atyp *kad_eval_at(int n, kad_node_t **a, int from)
 {
 	int i;
 	if (from < 0 || from >= n) from = n - 1;
@@ -571,7 +572,7 @@ void kad_grad(int n, kad_node_t **a, int from)
 	kad_propagate_marks(n, a);
 	for (i = 0; i <= from; ++i) /* set all grandients to zero */
 		if (a[i]->g && a[i]->tmp > 0)
-			memset(a[i]->g, 0, kad_len(a[i]) * sizeof(float));
+			memset(a[i]->g, 0, kad_len(a[i]) * sizeof(atyp));
 	for (i = from, a[i]->g[0] = 1.0f; i >= 0; --i) /* backprop */
 		if (a[i]->n_child && a[i]->tmp > 0)
 			kad_op_list[a[i]->op](a[i], KAD_BACKWARD);
@@ -701,8 +702,8 @@ kad_node_t **kad_clone(int n, kad_node_t **v, int batch_size)
 			for (j = 0; j < p->n_child; ++j)
 				q->child[j] = u[p->child[j]->tmp];
 		} else if (!kad_is_feed(p)) {
-			q->x = (float*)malloc(kad_len(p) * sizeof(float));
-			memcpy(q->x, p->x, kad_len(p) * sizeof(float));
+			q->x = (atyp*)malloc(kad_len(p) * sizeof(atyp));
+			memcpy(q->x, p->x, kad_len(p) * sizeof(atyp));
 			q->g = 0;
 		}
 	}
@@ -825,6 +826,8 @@ kad_node_t **kad_unroll(int n_v, kad_node_t **v, int *new_n, int *len)
 #ifdef __SSE__
 #include <xmmintrin.h>
 
+#if PROGRAM_PRECISION == ANN_FLOAT
+
 static inline float kad_sdot(int n, const float *x, const float *y) /* BLAS sdot using SSE */
 {
 	int i, n8 = n>>3<<3;
@@ -867,6 +870,55 @@ static inline void kad_saxpy_inlined(int n, float a, const float *x, float *y) /
 	for (; i < n; ++i) y[i] += a * x[i];
 }
 #else
+
+static inline double kad_sdot(int n, const double *x, const double *y) /* BLAS sdot using SSE */
+{
+	int i, n8 = n>>3<<3;
+	__m128d vs1, vs2;
+	double s, t[4];
+	vs1 = _mm_setzero_pd();
+	vs2 = _mm_setzero_pd();
+	for (i = 0; i < n8; i += 8) {
+		__m128d vx1, vx2, vy1, vy2;
+		vx1 = _mm_loadu_pd(&x[i]);
+		vx2 = _mm_loadu_pd(&x[i+4]);
+		vy1 = _mm_loadu_pd(&y[i]);
+		vy2 = _mm_loadu_pd(&y[i+4]);
+		vs1 = _mm_add_pd(vs1, _mm_mul_pd(vx1, vy1));
+		vs2 = _mm_add_pd(vs2, _mm_mul_pd(vx2, vy2));
+	}
+	for (s = 0.; i < n; ++i) s += x[i] * y[i];
+	_mm_storeu_pd(t, vs1);
+	s += t[0] + t[1] + t[2] + t[3];
+	_mm_storeu_pd(t, vs2);
+	s += t[0] + t[1] + t[2] + t[3];
+	return s;
+}
+static inline void kad_saxpy_inlined(int n, double a, const double *x, double *y) /* BLAS saxpy using SSE */
+{
+	int i, n8 = n>>3<<3;
+	__m128d va;
+	va = _mm_set1_pd(a);
+	for (i = 0; i < n8; i += 8) {
+		__m128d vx1, vx2, vy1, vy2, vt1, vt2;
+		vx1 = _mm_loadu_pd(&x[i]);
+		vx2 = _mm_loadu_pd(&x[i+4]);
+		vy1 = _mm_loadu_pd(&y[i]);
+		vy2 = _mm_loadu_pd(&y[i+4]);
+		vt1 = _mm_add_pd(_mm_mul_pd(va, vx1), vy1);
+		vt2 = _mm_add_pd(_mm_mul_pd(va, vx2), vy2);
+		_mm_storeu_pd(&y[i], vt1);
+		_mm_storeu_pd(&y[i+4], vt2);
+	}
+	for (; i < n; ++i) y[i] += a * x[i];
+}
+
+#endif
+
+#else
+
+#if PROGRAM_PRECISION == ANN_FLOAT
+
 static inline float kad_sdot(int n, const float *x, const float *y) /* BLAS sdot */
 {
 	int i;
@@ -879,24 +931,42 @@ static inline void kad_saxpy_inlined(int n, float a, const float *x, float *y) /
 	int i;
 	for (i = 0; i < n; ++i) y[i] += a * x[i];
 }
+
+#else
+
+static inline double kad_sdot(int n, const double *x, const double *y) /* BLAS sdot */
+{
+	int i;
+	double s = 0.;
+	for (i = 0; i < n; ++i) s += x[i] * y[i];
+	return s;
+}
+static inline void kad_saxpy_inlined(int n, double a, const double *x, double *y) // BLAS saxpy
+{
+	int i;
+	for (i = 0; i < n; ++i) y[i] += a * x[i];
+}
+
 #endif
 
-void kad_vec_mul_sum(int n, float *a, const float *b, const float *c)
+#endif
+
+void kad_vec_mul_sum(int n, atyp *a, const atyp *b, const atyp *c)
 {
 	int i;
 	for (i = 0; i < n; ++i) a[i] += b[i] * c[i];
 }
 
-void kad_saxpy(int n, float a, const float *x, float *y) { kad_saxpy_inlined(n, a, x, y); }
+void kad_saxpy(int n, atyp a, const atyp *x, atyp *y) { kad_saxpy_inlined(n, a, x, y); }
 
 #ifdef HAVE_CBLAS
 #include <cblas.h>
-void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float *A, const float *B, float *C)
+void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const atyp *A, const atyp *B, atyp *C)
 {
 	cblas_sgemm(CblasRowMajor, trans_A? CblasTrans : CblasNoTrans, trans_B? CblasTrans : CblasNoTrans, M, N, K, 1.0f, A, trans_A? M : K, B, trans_B? K : N, 1.0f, C, N);
 }
 #else
-void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float *A, const float *B, float *C) /* simplified BLAS sgemm */
+void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const atyp *A, const atyp *B, atyp *C) /* simplified BLAS sgemm */
 {
 	static const int x = 16;
 	int i, j, k;
@@ -906,8 +976,8 @@ void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float
 				int ii, ie = M < i + x? M : i + x;
 				int jj, je = N < j + x? N : j + x;
 				for (ii = i; ii < ie; ++ii) { /* loop tiling */
-					const float *aii = A + ii * K, *bjj;
-					float *cii = C + ii * N;
+					const atyp *aii = A + ii * K, *bjj;
+					atyp *cii = C + ii * N;
 					for (jj = j, bjj = B + j * K; jj < je; ++jj, bjj += K)
 						cii[jj] += kad_sdot(K, aii, bjj);
 				}
@@ -1033,7 +1103,7 @@ int kad_op_add(kad_node_t *p, int action)
 		kad_copy_dim1(p, q[0]);
 	} else if (action == KAD_FORWARD) {
 		assert(n0 >= n1);
-		memcpy(p->x, q[0]->x, n0 * sizeof(float));
+		memcpy(p->x, q[0]->x, n0 * sizeof(atyp));
 		for (i = 0; i < n0; i += n1)
 			kad_saxpy(n1, 1.0f, q[1]->x, p->x + i);
 	} else if (action == KAD_BACKWARD) {
@@ -1057,7 +1127,7 @@ int kad_op_sub(kad_node_t *p, int action)
 		kad_copy_dim1(p, q[0]);
 	} else if (action == KAD_FORWARD) {
 		assert(n0 >= n1);
-		memcpy(p->x, q[0]->x, n0 * sizeof(float));
+		memcpy(p->x, q[0]->x, n0 * sizeof(atyp));
 		for (i = 0; i < n0; i += n1)
 			kad_saxpy(n1, -1.0f, q[1]->x, p->x + i);
 	} else if (action == KAD_BACKWARD) {
@@ -1081,7 +1151,7 @@ int kad_op_mul(kad_node_t *p, int action)
 		kad_copy_dim1(p, q[0]);
 	} else if (action == KAD_FORWARD) {
 		assert(n0 >= n1);
-		memset(p->x, 0, n0 * sizeof(float));
+		memset(p->x, 0, n0 * sizeof(atyp));
 		if (q[0]->x != 0 && q[1]->x != 0)
 			for (i = 0; i < n0; i += n1) /* TODO: optimize when n1==1 */
 				kad_vec_mul_sum(n1, p->x + i, q[0]->x + i, q[1]->x);
@@ -1110,7 +1180,7 @@ int kad_op_cmul(kad_node_t *p, int action)
 		if (n_a_col != n_b_col) return -1;
 		p->n_d = 2, p->d[0] = n_a_row, p->d[1] = n_b_row;
 	} else if (action == KAD_FORWARD) {
-		memset(p->x, 0, n_a_row * n_b_row * sizeof(float));
+		memset(p->x, 0, n_a_row * n_b_row * sizeof(atyp));
 		if (q[0]->x && q[1]->x)
 			kad_sgemm_simple(0, 1, n_a_row, n_b_row, n_col, q[0]->x, q[1]->x, p->x); /* Y = X * trans(W) */
 	} else if (action == KAD_BACKWARD) {
@@ -1137,7 +1207,7 @@ int kad_op_matmul(kad_node_t *p, int action) /* TODO: matmul and cmul have diffe
 		if (n_a_col != n_b_row) return -1;
 		p->n_d = 2, p->d[0] = n_a_row, p->d[1] = n_b_col;
 	} else if (action == KAD_FORWARD) {
-		memset(p->x, 0, n_a_row * n_b_col * sizeof(float));
+		memset(p->x, 0, n_a_row * n_b_col * sizeof(atyp));
 		if (q[0]->x && q[1]->x)
 			kad_sgemm_simple(0, 0, n_a_row, n_b_col, n_a_col, q[0]->x, q[1]->x, p->x); /* Y = X * W */
 	} else if (action == KAD_BACKWARD) {
@@ -1228,7 +1298,7 @@ int kad_op_reduce_sum(kad_node_t *p, int action)
 		for (i = j = 0; i < q->n_d; ++i)
 			if (i != axis) p->d[j++] = q->d[i];
 	} else if (action == KAD_FORWARD) {
-		memset(p->x, 0, kad_len(p) * sizeof(float));
+		memset(p->x, 0, kad_len(p) * sizeof(atyp));
 		for (i = 0; i < d0; ++i)
 			for (j = 0; j < q->d[axis]; ++j)
 				for (k = 0; k < d1; ++k)
@@ -1257,14 +1327,14 @@ int kad_op_reduce_mean(kad_node_t *p, int action)
 		for (i = j = 0; i < q->n_d; ++i)
 			if (i != axis) p->d[j++] = q->d[i];
 	} else if (action == KAD_FORWARD) {
-		float t = 1.0f / q->d[axis];
-		memset(p->x, 0, kad_len(p) * sizeof(float));
+		atyp t = 1.0f / q->d[axis];
+		memset(p->x, 0, kad_len(p) * sizeof(atyp));
 		for (i = 0; i < d0; ++i)
 			for (j = 0; j < q->d[axis]; ++j)
 				for (k = 0; k < d1; ++k)
 					p->x[i * d1 + k] += t * q->x[(i * q->d[axis] + j) * d1 + k];
 	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
-		float t = 1.0f / q->d[axis];
+		atyp t = 1.0f / q->d[axis];
 		for (i = 0; i < d0; ++i)
 			for (j = 0; j < q->d[axis]; ++j)
 				for (k = 0; k < d1; ++k)
@@ -1287,7 +1357,7 @@ int kad_op_dropout(kad_node_t *p, int action)
 		if (kad_is_back(p->child[0]))
 			p->gtmp = realloc(p->gtmp, n);
 	} else if (action == KAD_FORWARD) {
-		float r = kad_is_const(q) || kad_is_var(q)? 0.0f : *p->child[1]->x, z = 1.0f / (1.0f - r);
+		atyp r = kad_is_const(q) || kad_is_var(q)? 0.0f : *p->child[1]->x, z = 1.0f / (1.0f - r);
 		uint8_t *flag = (uint8_t*)p->gtmp;
 		for (i = 0; i < n; ++i) {
 			int kept = (kad_drand(p->ptr) >= r);
@@ -1295,7 +1365,7 @@ int kad_op_dropout(kad_node_t *p, int action)
 			if (flag) flag[i] = kept;
 		}
 	} else if (action == KAD_BACKWARD && kad_is_back(p->child[0])) {
-		float r = kad_is_const(q) || kad_is_var(q)? 0.0f : *p->child[1]->x, z = 1.0f / (1.0f - r);
+		atyp r = kad_is_const(q) || kad_is_var(q)? 0.0f : *p->child[1]->x, z = 1.0f / (1.0f - r);
 		uint8_t *flag = (uint8_t*)p->gtmp;
 		for (i = 0; i < n; ++i)
 			if (flag[i]) q->g[i] += z * p->g[i];
@@ -1312,17 +1382,17 @@ int kad_op_sample_normal(kad_node_t *p, int action) /* not tested */
 		kad_copy_dim1(p, q);
 	} else if (action == KAD_ALLOC) {
 		if (kad_is_back(p->child[0]))
-			p->gtmp = realloc(p->gtmp, n * sizeof(float));
+			p->gtmp = realloc(p->gtmp, n * sizeof(atyp));
 	} else if (action == KAD_FORWARD) {
-		float *r = (float*)p->gtmp;
+		atyp *r = (atyp*)p->gtmp;
 		for (i = 0; i < n; ++i) {
-			float z;
-			z = (float)kad_drand_normal(p->ptr);
+			atyp z;
+			z = (atyp)kad_drand_normal(p->ptr);
 			p->x[i] = q->x[i] * z;
 			if (r) r[i] = z;
 		}
 	} else if (action == KAD_BACKWARD && kad_is_back(p->child[0])) {
-		float *r = (float*)p->gtmp;
+		atyp *r = (atyp*)p->gtmp;
 		for (i = 0; i < n; ++i)
 			q->g[i] += p->g[i] * r[i];
 	}
@@ -1346,7 +1416,7 @@ int kad_op_slice(kad_node_t *p, int action)
 		p->d[axis] = range[1] - range[0];
 	} else if (action == KAD_FORWARD) {
 		for (i = 0; i < d0; ++i)
-			memcpy(&p->x[i * p->d[axis] * d1], &q->x[(i * q->d[axis] + range[0]) * d1], (range[1] - range[0]) * d1 * sizeof(float));
+			memcpy(&p->x[i * p->d[axis] * d1], &q->x[(i * q->d[axis] + range[0]) * d1], (range[1] - range[0]) * d1 * sizeof(atyp));
 	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
 		for (i = 0; i < d0; ++i)
 			kad_saxpy((range[1] - range[0]) * d1, 1.0f, &p->g[i * p->d[axis] * d1], &q->g[(i * q->d[axis] + range[0]) * d1]);
@@ -1377,7 +1447,7 @@ int kad_op_concat(kad_node_t *p, int action)
 		for (i = 0; i < d0; ++i)
 			for (j = k = 0; j < p->n_child; ++j) {
 				q = p->child[j];
-				memcpy(&p->x[(i * p->d[axis] + k) * d1], &q->x[i * q->d[axis] * d1], q->d[axis] * d1 * sizeof(float));
+				memcpy(&p->x[(i * p->d[axis] + k) * d1], &q->x[i * q->d[axis] * d1], q->d[axis] * d1 * sizeof(atyp));
 				k += q->d[axis];
 			}
 	} else if (action == KAD_BACKWARD) {
@@ -1421,7 +1491,7 @@ int kad_op_reshape(kad_node_t *p, int action)
 			}
 		} else kad_copy_dim1(p, q);
 	} else if (action == KAD_FORWARD) {
-		memcpy(p->x, q->x, kad_len(p) * sizeof(float));
+		memcpy(p->x, q->x, kad_len(p) * sizeof(atyp));
 	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
 		kad_saxpy(kad_len(p), 1.0f, p->g, q->g);
 	}
@@ -1444,7 +1514,7 @@ int kad_op_reverse(kad_node_t *p, int action)
 	} else if (action == KAD_FORWARD) {
 		for (i = 0; i < d0; ++i)
 			for (j = 0; j < n; ++j)
-				memcpy(&p->x[(i * n + n - 1 - j) * d1], &q->x[(i * n + j) * d1], d1 * sizeof(float));
+				memcpy(&p->x[(i * n + n - 1 - j) * d1], &q->x[(i * n + j) * d1], d1 * sizeof(atyp));
 	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
 		for (i = 0; i < d0; ++i)
 			for (j = 0; j < n; ++j)
@@ -1469,9 +1539,9 @@ int kad_op_mse(kad_node_t *p, int action)
 		double cost = 0.0;
 		for (i = 0; i < n; ++i)
 			cost += (y1->x[i] - y0->x[i]) * (y1->x[i] - y0->x[i]);
-		p->x[0] = (float)(cost / n);
+		p->x[0] = (atyp)(cost / n);
 	} else if (action == KAD_BACKWARD && kad_is_back(y1)) {
-		float t = 2.0f * p->g[0] / n;
+		atyp t = 2.0f * p->g[0] / n;
 		for (i = 0; i < n; ++i)
 			y1->g[i] += t * (y1->x[i] - y0->x[i]);
 	}
@@ -1480,7 +1550,7 @@ int kad_op_mse(kad_node_t *p, int action)
 
 int kad_op_ce_bin(kad_node_t *p, int action)
 {
-	static const float tiny = 1e-9f;
+	static const atyp tiny = 1e-9f;
 	kad_node_t *y1 = p->child[0]; /* test */
 	kad_node_t *y0 = p->child[1]; /* truth */
 	int i, n;
@@ -1497,9 +1567,9 @@ int kad_op_ce_bin(kad_node_t *p, int action)
 			if (1.0f - y0->x[i] > 0.0f)
 				cost += (1.0f - y0->x[i]) * log((1.0f - y0->x[i]) / (1.0f - y1->x[i] > tiny? 1.0f - y1->x[i] : tiny));
 		}
-		p->x[0] = (float)(cost / n);
+		p->x[0] = (atyp)(cost / n);
 	} else if (action == KAD_BACKWARD && kad_is_back(y1)) {
-		float t = p->g[0] / n;
+		atyp t = p->g[0] / n;
 		for (i = 0; i < n; ++i) {
 			if (y0->x[i] > 0.0f)
 				y1->g[i] -= t * y0->x[i] / (y1->x[i] > tiny? y1->x[i] : tiny);
@@ -1512,7 +1582,7 @@ int kad_op_ce_bin(kad_node_t *p, int action)
 
 int kad_op_ce_bin_neg(kad_node_t *p, int action)
 {
-	static const float tiny = 1e-9f;
+	static const atyp tiny = 1e-9f;
 	kad_node_t *y1 = p->child[0]; /* test */
 	kad_node_t *y0 = p->child[1]; /* truth */
 	int i, n;
@@ -1529,9 +1599,9 @@ int kad_op_ce_bin_neg(kad_node_t *p, int action)
 			if (1.0f - y0->x[i] > 0.0f)
 				cost += .5f * (1.0f - y0->x[i]) * log((1.0f - y0->x[i]) / (1.0f - y1->x[i] > tiny? 1.0f - y1->x[i] : tiny));
 		}
-		p->x[0] = (float)(cost / n);
+		p->x[0] = (atyp)(cost / n);
 	} else if (action == KAD_BACKWARD && kad_is_back(y1)) {
-		float t = p->g[0] / n;
+		atyp t = p->g[0] / n;
 		for (i = 0; i < n; ++i) {
 			if (1.0f + y0->x[i] > 0.0f)
 				y1->g[i] -= .5f * t * (1.0f + y0->x[i]) / (1.0f + y1->x[i] > tiny? 1.0f + y1->x[i] : tiny);
@@ -1544,7 +1614,7 @@ int kad_op_ce_bin_neg(kad_node_t *p, int action)
 
 int kad_op_ce_multi(kad_node_t *p, int action)
 {
-	static const float tiny = 1e-9f;
+	static const atyp tiny = 1e-9f;
 	kad_node_t *y1 = p->child[0]; /* test */
 	kad_node_t *y0 = p->child[1]; /* truth */
 	int i, j, n1, d0;
@@ -1557,16 +1627,16 @@ int kad_op_ce_multi(kad_node_t *p, int action)
 	} else if (action == KAD_FORWARD) {
 		double cost = 0.0;
 		for (j = 0; j < d0; ++j) {
-			float *x1 = &y1->x[j * n1], *x0 = &y0->x[j * n1];
+			atyp *x1 = &y1->x[j * n1], *x0 = &y0->x[j * n1];
 			for (i = 0; i < n1; ++i)
 				if (x0[i] > 0.0f)
 					cost += x0[i] * log(x0[i] / (x1[i] > tiny? x1[i] : tiny));
 		}
-		p->x[0] = (float)(cost / d0);
+		p->x[0] = (atyp)(cost / d0);
 	} else if (action == KAD_BACKWARD && kad_is_back(y1)) {
-		float t = p->g[0] / d0;
+		atyp t = p->g[0] / d0;
 		for (j = 0; j < d0; ++j) {
-			float *g = &y1->g[j * n1], *x1 = &y1->x[j * n1], *x0 = &y0->x[j * n1];
+			atyp *g = &y1->g[j * n1], *x1 = &y1->x[j * n1], *x0 = &y0->x[j * n1];
 			for (i = 0; i < n1; ++i)
 				g[i] -= t * x0[i] / (x1[i] > tiny? x1[i] : tiny);
 		}
@@ -1586,25 +1656,25 @@ int kad_op_stdnorm(kad_node_t *p, int action)
 	if (action == KAD_SYNC_DIM) {
 		kad_copy_dim1(p, q);
 	} else if (action == KAD_ALLOC) {
-		p->gtmp = realloc(p->gtmp, m * sizeof(float));
+		p->gtmp = realloc(p->gtmp, m * sizeof(atyp));
 	} else if (action == KAD_FORWARD) {
-		float *si = (float*)p->gtmp;
+		atyp *si = (atyp*)p->gtmp;
 		for (j = 0; j < m; ++j) {
-			float *px = &p->x[j * n], *qx = &q->x[j * n];
-			float avg, std_inv;
+			atyp *px = &p->x[j * n], *qx = &q->x[j * n];
+			atyp avg, std_inv;
 			double s;
 			for (i = 0, s = 0.0; i < n; ++i) s += qx[i];
-			avg = (float)(s / n);
+			avg = (atyp)(s / n);
 			for (i = 0; i < n; ++i) px[i] = qx[i] - avg;
 			for (i = 0, s = 0.0; i < n; ++i) s += px[i] * px[i];
-			std_inv = s == 0.0? 1.0f : (float)(1.0 / sqrt(s / n));
+			std_inv = s == 0.0? 1.0f : (atyp)(1.0 / sqrt(s / n));
 			for (i = 0; i < n; ++i) px[i] *= std_inv;
 			si[j] = std_inv;
 		}
 	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
-		float *si = (float*)p->gtmp;
+		atyp *si = (atyp*)p->gtmp;
 		for (j = 0; j < m; ++j) {
-			float *pg = &p->g[j * n], *qg = &q->g[j * n], *px = &p->x[j * n], std_inv = si[j];
+			atyp *pg = &p->g[j * n], *qg = &q->g[j * n], *px = &p->x[j * n], std_inv = si[j];
 			double s, t;
 			for (i = 0, s = t = 0.0; i < n; ++i)
 				s += pg[i], t += px[i] * pg[i];
@@ -1646,7 +1716,7 @@ int kad_op_tanh(kad_node_t *p, int action)
 		for (i = 0; i < n; ++i) {
 			if (q->x[i] < -20.0f) p->x[i] = -1.0f;
 			else {
-				float y;
+				atyp y;
 				y = expf(-2.0f * q->x[i]);
 				p->x[i] = (1.0f - y) / (1.0f + y);
 			}
@@ -1703,7 +1773,7 @@ int kad_op_softmax(kad_node_t *p, int action)
 		kad_copy_dim1(p, q);
 	} else if (action == KAD_FORWARD) {
 		for (j = 0; j < d0; ++j) {
-			float s, max, *x = &q->x[j * n1], *y = &p->x[j * n1];
+			atyp s, max, *x = &q->x[j * n1], *y = &p->x[j * n1];
 			for (i = 0, max = -FLT_MAX; i < n1; ++i)
 				max = max > x[i]? max : x[i];
 			for (i = 0, s = 0.0f; i < n1; ++i) {
@@ -1714,7 +1784,7 @@ int kad_op_softmax(kad_node_t *p, int action)
 		}
 	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
 		for (j = 0; j < d0; ++j) {
-			float s, *g = &p->g[j * n1], *y = &p->x[j * n1], *h = &q->g[j * n1];
+			atyp s, *g = &p->g[j * n1], *y = &p->x[j * n1], *h = &q->g[j * n1];
 			for (i = 0, s = 0.0f; i < n1; ++i)
 				s += g[i] * y[i];
 			for (i = 0; i < n1; ++i)
@@ -1729,7 +1799,7 @@ int kad_op_softmax(kad_node_t *p, int action)
 int kad_op_avg(kad_node_t *p, int action)
 {
 	int i, n;
-	float tmp;
+	atyp tmp;
 	kad_node_t *q;
 
 	assert(p->n_child > 0);
@@ -1741,7 +1811,7 @@ int kad_op_avg(kad_node_t *p, int action)
 			if (kad_len(p->child[i]) != n) return -1;
 		kad_copy_dim1(p, q);
 	} else if (action == KAD_FORWARD) {
-		memcpy(p->x, q->x, n * sizeof(float));
+		memcpy(p->x, q->x, n * sizeof(atyp));
 		for (i = 1; i < p->n_child; ++i)
 			kad_saxpy(n, 1.0f, p->child[i]->x, p->x);
 		for (i = 0; i < n; ++i) p->x[i] *= tmp;
@@ -1768,7 +1838,7 @@ int kad_op_max(kad_node_t *p, int action)
 	} else if (action == KAD_FORWARD) {
 		int j, *max_j = (int*)p->gtmp;
 		memset(max_j, 0, n * sizeof(int));
-		memcpy(p->x, q->x, n * sizeof(float));
+		memcpy(p->x, q->x, n * sizeof(atyp));
 		for (j = 1; j < p->n_child; ++j)
 			for (i = 0, q = p->child[j]; i < n; ++i)
 				if (q->x[i] > p->x[i]) p->x[i] = q->x[i], max_j[i] = j;
@@ -1797,7 +1867,7 @@ int kad_op_stack(kad_node_t *p, int action) /* TODO: allow axis, as in TensorFlo
 		for (; i < q->n_d; ++i) p->d[i+1] = q->d[i];
 	} else if (action == KAD_FORWARD) { /* TODO: doesn't work when axis != 0 */
 		for (i = 0; i < p->n_child; ++i)
-			memcpy(&p->x[i * n], p->child[i]->x, n * sizeof(float));
+			memcpy(&p->x[i * n], p->child[i]->x, n * sizeof(atyp));
 	} else if (action == KAD_BACKWARD) {
 		for (i = 0; i < p->n_child; ++i)
 			if (kad_is_back(p->child[i]))
@@ -1823,7 +1893,7 @@ int kad_op_select(kad_node_t *p, int action)
 		if (i < p->n_child) return -1;
 		kad_copy_dim1(p, q);
 	} else if (action == KAD_FORWARD) {
-		memcpy(p->x, q->x, n * sizeof(float));
+		memcpy(p->x, q->x, n * sizeof(atyp));
 	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
 		kad_saxpy(n, 1.0f, p->g, q->g);
 	}
@@ -1832,17 +1902,17 @@ int kad_op_select(kad_node_t *p, int action)
 
 /********** 2D convolution **********/
 
-static void conv_rot180(int d0, int d1, float *x) /* rotate/reverse a weight martix */
+static void conv_rot180(int d0, int d1, atyp *x) /* rotate/reverse a weight martix */
 {
 	int i, j;
 	for (i = 0; i < d0; ++i) {
-		float tmp, *xi = &x[i * d1];
+		atyp tmp, *xi = &x[i * d1];
 		for (j = 0; j < d1>>1; ++j)
 			tmp = xi[j], xi[j] = xi[d1-1-j], xi[d1-1-j] = tmp; 
 	}
 }
 
-static void conv2d_move_1to3(int d[4], const float *x, float *y) /* convert the NCHW shape to the NHWC shape */
+static void conv2d_move_1to3(int d[4], const atyp *x, atyp *y) /* convert the NCHW shape to the NHWC shape */
 {
 	int i, j, k, l;
 	for (i = 0; i < d[0]; ++i)
@@ -1854,7 +1924,7 @@ static void conv2d_move_1to3(int d[4], const float *x, float *y) /* convert the 
 			}
 }
 
-static void conv2d_add_3to1(int d[4], const float *y, float *x) /* convert the NHWC shape back to NCHW and add to another NCHW-shaped array */
+static void conv2d_add_3to1(int d[4], const atyp *y, atyp *x) /* convert the NHWC shape back to NCHW and add to another NCHW-shaped array */
 {
 	int i, j, k, l;
 	for (i = 0; i < d[0]; ++i)
@@ -1872,7 +1942,7 @@ static void conv2d_add_3to1(int d[4], const float *y, float *x) /* convert the N
 	int j, l; \
 	if (_stride > 1) { \
 		for (l = 0; l < _wn; ++l) { \
-			const float *xl = &_xx[l - _pad]; \
+			const atyp *xl = &_xx[l - _pad]; \
 			for (j = 0; j < _pn; ++j, xl += _stride) _t[j] = *xl; \
 			kad_saxpy(_pn, _ww[l], _t, _yy); \
 		} \
@@ -1883,8 +1953,8 @@ static void conv2d_add_3to1(int d[4], const float *y, float *x) /* convert the N
 	int j, l; \
 	if (_stride > 1) { \
 		for (l = 0; l < _wn; ++l) { \
-			float *xl = &_xx[l - _pad]; \
-			memset(_t, 0, _pn * sizeof(float)); \
+			atyp *xl = &_xx[l - _pad]; \
+			memset(_t, 0, _pn * sizeof(atyp)); \
 			kad_saxpy(_pn, _ww[l], _yy, _t); \
 			for (j = 0; j < _pn; ++j, xl += _stride) *xl += _t[j]; \
 		} \
@@ -1895,7 +1965,7 @@ static void conv2d_add_3to1(int d[4], const float *y, float *x) /* convert the N
 	int j, l; \
 	if (_stride > 1) { \
 		for (l = 0; l < _wn; ++l) { \
-			const float *xl = &_xx[l - _pad]; \
+			const atyp *xl = &_xx[l - _pad]; \
 			for (j = 0; j < _pn; ++j, xl += _stride) _t[j] = *xl; \
 			_ww[l] += kad_sdot(_pn, _yy, _t); \
 		} \
@@ -1905,7 +1975,7 @@ static void conv2d_add_3to1(int d[4], const float *y, float *x) /* convert the N
 /* Forward and backward passes are implemented with two different algorithms.
  * The first is faster for small kernels with few input channels; otherwise the
  * second algorithm is faster. Both algorithms should produce identical
- * results, up to the precision of "float".
+ * results, up to the precision of "atyp".
  */
 int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-width (NCHW) shape */
 {
@@ -1915,12 +1985,12 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 			for (c1 = 0; c1 < w->d[0]; ++c1) /* output channel */ \
 				for (c0 = 0; c0 < w->d[1]; ++c0) /* input channel */ \
 					for (k = 0; k < w->d[2]; ++k) { /* kernel row */ \
-						float *_ww = &(_w)[((c1 * w->d[1] + c0) * w->d[2] + k) * w->d[3]]; \
+						atyp *_ww = &(_w)[((c1 * w->d[1] + c0) * w->d[2] + k) * w->d[3]]; \
 						for (i = 0, ii = k - aux[0].pad[0]; i < p->d[2] && ii >= 0 && ii < q->d[2]; ++i, ii += aux[0].stride) { /* output row */ \
-							float *_xx = &(_x)[((n * q->d[1] + c0) * q->d[2] + ii) * q->d[3]]; \
-							float *_yy = &(_y)[((n * p->d[1] + c1) * p->d[2] + i)  * p->d[3]]; \
+							atyp *_xx = &(_x)[((n * q->d[1] + c0) * q->d[2] + ii) * q->d[3]]; \
+							atyp *_yy = &(_y)[((n * p->d[1] + c1) * p->d[2] + i)  * p->d[3]]; \
 							if (x_padded) { \
-								memcpy(x_padded + aux[1].pad[0], _xx, q->d[3] * sizeof(float)); \
+								memcpy(x_padded + aux[1].pad[0], _xx, q->d[3] * sizeof(atyp)); \
 								_xx = x_padded + aux[1].pad[0]; \
 							} \
 							_row_func(_xx, _ww, _yy, w->d[3], p->d[3], aux[1].stride, aux[1].pad[0], (_tmp)); \
@@ -1933,12 +2003,12 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 		for (n = 0; n < q->d[0]; ++n) /* mini-batch */ \
 			for (c1 = 0; c1 < w->d[0]; ++c1) /* output channel */ \
 				for (k = 0; k < w->d[2]; ++k) { /* kernel row */ \
-					float *_ww = &(_w)[(c1 * w->d[2] + k) * m]; \
+					atyp *_ww = &(_w)[(c1 * w->d[2] + k) * m]; \
 					for (i = 0, ii = k - aux[0].pad[0]; i < p->d[2] && ii >= 0 && ii < q->d[2]; ++i, ii += aux[0].stride) { /* output and input row */ \
-						float *_xx = &(_x)[(n * q->d[2] + ii) * q->d[3] * q->d[1]]; \
-						float *_yy = &(_y)[((n * p->d[1] + c1) * p->d[2] + i) * p->d[3]]; \
+						atyp *_xx = &(_x)[(n * q->d[2] + ii) * q->d[3] * q->d[1]]; \
+						atyp *_yy = &(_y)[((n * p->d[1] + c1) * p->d[2] + i) * p->d[3]]; \
 						if (x_padded) { \
-							memcpy(x_padded + aux[1].pad[0] * q->d[1], _xx, q->d[3] * q->d[1] * sizeof(float)); \
+							memcpy(x_padded + aux[1].pad[0] * q->d[1], _xx, q->d[3] * q->d[1] * sizeof(atyp)); \
 							_xx = x_padded; \
 						} \
 						for (j = 0; j < p->d[3]; ++j, _xx += j_skip, ++_yy) _code; /* output and input column */ \
@@ -1948,17 +2018,17 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 
 	conv_conf_t *aux = (conv_conf_t*)p->ptr;
 	kad_node_t *q = p->child[0], *w = p->child[1];
-	float *t = 0, *q1 = 0, *w1 = 0, *x_padded = 0;
+	atyp *t = 0, *q1 = 0, *w1 = 0, *x_padded = 0;
 	int algo_switch = 0;
 
 	if (action == KAD_FORWARD || action == KAD_BACKWARD) { /* allocate working space */
 		if (w->d[3] * w->d[1] < 16) {
-			t = (float*)malloc(p->d[3] * sizeof(float));
-			x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc(q->d[3] + aux[1].pad[0] + aux[1].pad[1], sizeof(float)) : 0;
+			t = (atyp*)malloc(p->d[3] * sizeof(atyp));
+			x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (atyp*)calloc(q->d[3] + aux[1].pad[0] + aux[1].pad[1], sizeof(atyp)) : 0;
 		} else {
-			q1 = (float*)malloc(kad_len(q) * sizeof(float));
-			w1 = (float*)malloc(kad_len(w) * sizeof(float));
-			x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc((q->d[3] + aux[1].pad[0] + aux[1].pad[1]) * q->d[1], sizeof(float)) : 0;
+			q1 = (atyp*)malloc(kad_len(q) * sizeof(atyp));
+			w1 = (atyp*)malloc(kad_len(w) * sizeof(atyp));
+			x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (atyp*)calloc((q->d[3] + aux[1].pad[0] + aux[1].pad[1]) * q->d[1], sizeof(atyp)) : 0;
 			algo_switch = 1;
 		}
 	}
@@ -1969,7 +2039,7 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 		p->d[0] = q->d[0], p->d[1] = w->d[0], p->d[2] = conv_out_size(q->d[2], &aux[0]), p->d[3] = conv_out_size(q->d[3], &aux[1]);
 	} else if (action == KAD_FORWARD) {
 		conv_rot180(w->d[0] * w->d[1], w->d[2] * w->d[3], w->x);
-		memset(p->x, 0, kad_len(p) * sizeof(float));
+		memset(p->x, 0, kad_len(p) * sizeof(atyp));
 		if (!algo_switch) { /* this is the first algorithm */
 			conv2d_loop1(q->x, w->x, p->x, t, process_row_for);
 		} else { /* this is the second algorithm */
@@ -1984,7 +2054,7 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 			if (!algo_switch) {
 				conv2d_loop1(q->g, w->x, p->g, t, process_row_back_x);
 			} else {
-				memset(q1, 0, kad_len(q) * sizeof(float));
+				memset(q1, 0, kad_len(q) * sizeof(atyp));
 				conv2d_move_1to3(w->d, w->x, w1);
 				conv2d_loop2(q1, w1, p->g, kad_saxpy(m, *_yy, _ww, _xx));
 				conv2d_add_3to1(q->d, q1, q->g);
@@ -1997,7 +2067,7 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 				conv2d_loop1(q->x, w->g, p->g, t, process_row_back_w);
 			} else {
 				conv2d_move_1to3(q->d, q->x, q1);
-				memset(w1, 0, kad_len(w) * sizeof(float));
+				memset(w1, 0, kad_len(w) * sizeof(atyp));
 				conv2d_loop2(q1, w1, p->g, kad_saxpy(m, *_yy, _xx, _ww));
 				conv2d_add_3to1(w->d, w1, w->g);
 			}
@@ -2050,7 +2120,7 @@ int kad_op_max2d(kad_node_t *p, int action)
 
 /********** 1D convolution **********/
 
-static void conv1d_move_1to2(int d[3], const float *x, float *y)
+static void conv1d_move_1to2(int d[3], const atyp *x, atyp *y)
 {
 	int i, j, k;
 	for (k = 0; k < d[0]; ++k)
@@ -2059,7 +2129,7 @@ static void conv1d_move_1to2(int d[3], const float *x, float *y)
 				y[(k * d[2] + i) * d[1] + j] = x[(k * d[1] + j) * d[2] + i];
 }
 
-static void conv1d_add_2to1(int d[3], const float *y, float *x)
+static void conv1d_add_2to1(int d[3], const atyp *y, atyp *x)
 {
 	int i, j, k;
 	for (k = 0; k < d[0]; ++k)
@@ -2075,11 +2145,11 @@ int kad_op_conv1d(kad_node_t *p, int action) /* in the number-channel-width (NCW
 		for (n = 0; n < q->d[0]; ++n) /* mini-batch */ \
 			for (c1 = 0; c1 < w->d[0]; ++c1) /* output channel */ \
 				for (c0 = 0; c0 < w->d[1]; ++c0) { /* input channel */ \
-					float *_ww = &(_w)[(c1 * w->d[1] + c0) * w->d[2]]; \
-					float *_xx = &(_x)[(n  * q->d[1] + c0) * q->d[2]]; \
-					float *_yy = &(_y)[(n  * p->d[1] + c1) * p->d[2]]; \
+					atyp *_ww = &(_w)[(c1 * w->d[1] + c0) * w->d[2]]; \
+					atyp *_xx = &(_x)[(n  * q->d[1] + c0) * q->d[2]]; \
+					atyp *_yy = &(_y)[(n  * p->d[1] + c1) * p->d[2]]; \
 					if (x_padded) { \
-						memcpy(x_padded + aux->pad[0], _xx, q->d[2] * sizeof(float)); \
+						memcpy(x_padded + aux->pad[0], _xx, q->d[2] * sizeof(atyp)); \
 						_xx = x_padded + aux->pad[0]; \
 					} \
 					_row_func(_xx, _ww, _yy, w->d[2], p->d[2], aux->stride, aux->pad[0], (_tmp)); \
@@ -2090,11 +2160,11 @@ int kad_op_conv1d(kad_node_t *p, int action) /* in the number-channel-width (NCW
 		int n, c1, j, j_skip = aux->stride * q->d[1], m = w->d[2] * w->d[1]; \
 		for (n = 0; n < q->d[0]; ++n) /* mini-batch */ \
 			for (c1 = 0; c1 < w->d[0]; ++c1) { /* output channel */ \
-				float *_ww = &(_w)[c1 * m]; \
-				float *_xx = &(_x)[n * q->d[1] * q->d[2]]; \
-				float *_yy = &(_y)[(n * p->d[1] + c1) * p->d[2]]; \
+				atyp *_ww = &(_w)[c1 * m]; \
+				atyp *_xx = &(_x)[n * q->d[1] * q->d[2]]; \
+				atyp *_yy = &(_y)[(n * p->d[1] + c1) * p->d[2]]; \
 				if (x_padded) { \
-					memcpy(x_padded + aux->pad[0] * q->d[1], _xx, q->d[2] * q->d[1] * sizeof(float)); \
+					memcpy(x_padded + aux->pad[0] * q->d[1], _xx, q->d[2] * q->d[1] * sizeof(atyp)); \
 					_xx = x_padded; \
 				} \
 				for (j = 0; j < p->d[2]; ++j, _xx += j_skip, ++_yy) _code; \
@@ -2103,17 +2173,17 @@ int kad_op_conv1d(kad_node_t *p, int action) /* in the number-channel-width (NCW
 
 	conv_conf_t *aux = (conv_conf_t*)p->ptr;
 	kad_node_t *q = p->child[0], *w = p->child[1];
-	float *t = 0, *q1 = 0, *w1 = 0, *x_padded = 0;
+	atyp *t = 0, *q1 = 0, *w1 = 0, *x_padded = 0;
 	int algo_switch = 0;
 
 	if (action == KAD_FORWARD || action == KAD_BACKWARD) { /* allocate working space */
 		if (w->d[2] * w->d[1] < 32) {
-			t = (float*)malloc(p->d[2] * sizeof(float));
-			x_padded = aux->pad[0] + aux->pad[1] > 0? (float*)calloc(q->d[2] + aux->pad[0] + aux->pad[1], sizeof(float)) : 0;
+			t = (atyp*)malloc(p->d[2] * sizeof(atyp));
+			x_padded = aux->pad[0] + aux->pad[1] > 0? (atyp*)calloc(q->d[2] + aux->pad[0] + aux->pad[1], sizeof(atyp)) : 0;
 		} else {
-			q1 = (float*)malloc(kad_len(q) * sizeof(float));
-			w1 = (float*)malloc(kad_len(w) * sizeof(float));
-			x_padded = aux->pad[0] + aux->pad[1] > 0? (float*)calloc((q->d[2] + aux->pad[0] + aux->pad[1]) * q->d[1], sizeof(float)) : 0;
+			q1 = (atyp*)malloc(kad_len(q) * sizeof(atyp));
+			w1 = (atyp*)malloc(kad_len(w) * sizeof(atyp));
+			x_padded = aux->pad[0] + aux->pad[1] > 0? (atyp*)calloc((q->d[2] + aux->pad[0] + aux->pad[1]) * q->d[1], sizeof(atyp)) : 0;
 			algo_switch = 1;
 		}
 	}
@@ -2124,7 +2194,7 @@ int kad_op_conv1d(kad_node_t *p, int action) /* in the number-channel-width (NCW
 		p->d[0] = q->d[0], p->d[1] = w->d[0], p->d[2] = conv_out_size(q->d[2], aux);
 	} else if (action == KAD_FORWARD) {
 		conv_rot180(w->d[0] * w->d[1], w->d[2], w->x);
-		memset(p->x, 0, kad_len(p) * sizeof(float));
+		memset(p->x, 0, kad_len(p) * sizeof(atyp));
 		if (!algo_switch) { /* this is the first algorithm */
 			conv1d_loop1(q->x, w->x, p->x, t, process_row_for);
 		} else { /* this is the second algorithm */
@@ -2139,7 +2209,7 @@ int kad_op_conv1d(kad_node_t *p, int action) /* in the number-channel-width (NCW
 			if (!algo_switch) {
 				conv1d_loop1(q->g, w->x, p->g, t, process_row_back_x);
 			} else {
-				memset(q1, 0, kad_len(q) * sizeof(float));
+				memset(q1, 0, kad_len(q) * sizeof(atyp));
 				conv1d_move_1to2(w->d, w->x, w1);
 				conv1d_loop2(q1, w1, p->g, kad_saxpy(m, *_yy, _ww, _xx));
 				conv1d_add_2to1(q->d, q1, q->g);
@@ -2152,7 +2222,7 @@ int kad_op_conv1d(kad_node_t *p, int action) /* in the number-channel-width (NCW
 				conv1d_loop1(q->x, w->g, p->g, t, process_row_back_w);
 			} else {
 				conv1d_move_1to2(q->d, q->x, q1);
-				memset(w1, 0, kad_len(w) * sizeof(float));
+				memset(w1, 0, kad_len(w) * sizeof(atyp));
 				conv1d_loop2(q1, w1, p->g, kad_saxpy(m, *_yy, _xx, _ww));
 				conv1d_add_2to1(w->d, w1, w->g);
 			}
@@ -2321,7 +2391,7 @@ void kad_print_graph(FILE *fp, int n, kad_node_t **v)
 	for (i = 0; i < n; ++i) v[i]->tmp = 0;
 }
 
-static void kad_add_delta(int n, kad_node_t **a, float c, float *delta)
+static void kad_add_delta(int n, kad_node_t **a, atyp c, atyp *delta)
 {
 	int i, k;
 	for (i = k = 0; i < n; ++i)
@@ -2333,20 +2403,20 @@ static void kad_add_delta(int n, kad_node_t **a, float c, float *delta)
 
 void kad_check_grad(int n, kad_node_t **a, int from)
 {
-	const float eps = 1e-5f, rel = 1e-7f / eps;
+	const atyp eps = 1e-5f, rel = 1e-7f / eps;
 	int i, k, n_var;
-	float *g0, *delta, f0, f_minus, f_plus, s0, s1, rel_err, p_m_err;
+	atyp *g0, *delta, f0, f_minus, f_plus, s0, s1, rel_err, p_m_err;
 	n_var = kad_size_var(n, a);
-	g0 = (float*)calloc(n_var, sizeof(float));
+	g0 = (atyp*)calloc(n_var, sizeof(atyp));
 	f0 = *kad_eval_at(n, a, from);
 	kad_grad(n, a, from);
 	for (i = k = 0; i < n; ++i)
 		if (kad_is_var(a[i])) {
-			memcpy(&g0[k], a[i]->g, kad_len(a[i]) * sizeof(float));
+			memcpy(&g0[k], a[i]->g, kad_len(a[i]) * sizeof(atyp));
 			k += kad_len(a[i]);
 		}
-	delta = (float*)calloc(n_var, sizeof(float));
-	for (k = 0; k < n_var; ++k) delta[k] = (float)kad_drand(0) * eps;
+	delta = (atyp*)calloc(n_var, sizeof(atyp));
+	for (k = 0; k < n_var; ++k) delta[k] = (atyp)kad_drand(0) * eps;
 	kad_add_delta(n, a, 1.0f, delta);
 	f_plus = *kad_eval_at(n, a, from);
 	kad_add_delta(n, a, -2.0f, delta);
