@@ -694,13 +694,13 @@ int main(int argc, char *argv[])
 					t = kad_sigm(kann_layer_dense(t, n_h_neurons));
 					break;
 				case 1:
-					kann_layer_rnn(t, n_h_neurons, rnn_flag);
+					t = kann_layer_rnn(t, n_h_neurons, rnn_flag);
 					break;
 				case 2:
-					kann_layer_gru(t, n_h_neurons, rnn_flag);
+					t = kann_layer_gru(t, n_h_neurons, rnn_flag);
 					break;
 				case 3:
-					kann_layer_lstm(t, n_h_neurons, rnn_flag);
+					t = kann_layer_lstm(t, n_h_neurons, rnn_flag);
 					break;
 				default:
 					break;
