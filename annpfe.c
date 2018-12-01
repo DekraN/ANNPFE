@@ -678,8 +678,6 @@ int main(int argc, char *argv[])
 			}
 		}
 	
-	(void) getchar();
-	
 	if (to_apply)
 	{
 		// model generation
