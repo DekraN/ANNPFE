@@ -648,7 +648,7 @@ int main(int argc, char *argv[])
 			};
 			
 
-			for(i=N_FEATURES+N_DIM_OUT+n_lag-1; i>=0; --i)
+			for(i=tot_features_lag-1; i>=0; --i)
 			{
 				output_feature_a[i] = norm_functions[stdnorm-1][0](train_data, dataset_size, i, tot_features_lag);
 				output_feature_b[i] = norm_functions[stdnorm-1][1](train_data, dataset_size, i, tot_features_lag); 
@@ -727,7 +727,7 @@ int main(int argc, char *argv[])
 		if(t_method)
 			test(ann, &train_data[(int)(tot_features_lag*(N_SAMPLES-n_lag)*(t_idx+val_idx))], N_SAMPLES - (int)(N_SAMPLES*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, feature_scaling_min, feature_scaling_max);
 		else
-			test(ann, train_data, N_SAMPLES-n_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, stdnorm, net_type, feature_scaling_min, feature_scaling_max);	
+			test(ann, train_data, N_SAMPLES-n_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, feature_scaling_min, feature_scaling_max);	
 		
 		printf("\nTest total cost: %g\n", tot_cost);
 	}
