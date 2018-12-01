@@ -1,5 +1,3 @@
-typedef float atyp;
-
 enum
 {
 	ANN_FLOAT,
@@ -8,4 +6,10 @@ enum
 
 #ifndef PROGRAM_PRECISION
 	#define PROGRAM_PRECISION ANN_FLOAT
+#endif
+
+#if PROGRAM_PRECISION == ANN_FLOAT
+	typedef float atyp;
+#else
+	typedef double atyp;
 #endif

@@ -2,7 +2,7 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <string.h>
-#include <atyp.h>
+#include <float.h>
 #include <math.h>
 #include "../inter_h.h"
 #include "kautodiff.h"

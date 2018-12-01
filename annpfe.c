@@ -1,7 +1,7 @@
 /*
 #################################################################
 #   ANNPFE - Artificial Neural Network Prototyping Front-End    #
-#             Final Built, v0.1 - 30/11/2018                    #
+#             Final Built, v0.1 - 01/12/2018                    #
 #                    Authors/Developer:                         #
 #             Marco Chiarelli        @ UNISALENTO & CMCC        #
 #               Gabriele Accarino    @ UNISALENTO & CMCC        #
@@ -104,10 +104,10 @@ enum
 
 static unsigned char train_exec = 1;
 
-static float MIN(float a[], int n, int pitch, int max_pitch)
+static atyp MIN(atyp a[], int n, int pitch, int max_pitch)
 {
 	int c, index;
-	float min = a[pitch];
+	atyp min = a[pitch];
 
 	index = pitch;
 
@@ -168,7 +168,7 @@ static inline atyp STD(atyp a[], int n, int pitch, int max_pitch)
 	return sqrtf(VARIANCE(a, n, pitch, max_pitch));
 }
 
-static void normalize_minmax(atyp *vec, int size, int pitch, int max_pitch, float min_x, atyp max_x, atyp a, float b)
+static void normalize_minmax(atyp *vec, int size, int pitch, int max_pitch, atyp min_x, atyp max_x, atyp a, atyp b)
 {
 	int i;
 
@@ -202,7 +202,7 @@ static inline atyp minmax_denormalize(register atyp y, atyp min_x, atyp max_x, a
 	return ((y-a)/(b-a))*(max_x-min_x) + min_x;
 }
 
-static inline float z_unscoring(register atyp y, atyp mean, atyp var, atyp a, atyp b)
+static inline atyp z_unscoring(register atyp y, atyp mean, atyp var, atyp a, atyp b)
 {
 	#pragma unused a
 	#pragma unused b
@@ -261,7 +261,7 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 		}
 	}
 
-	if((r = (float*)calloc(n_var, sizeof(float))) == NULL) // temporary array for RMSprop
+	if((r = (atyp*)calloc(n_var, sizeof(atyp))) == NULL) // temporary array for RMSprop
 	{
 
 		for (k = 0; k < ulen; ++k)
@@ -571,7 +571,7 @@ int main(int argc, char *argv[])
 
 	printf("\n\n#################################################################\n");
 	printf("#   ANNPFE - Artificial Neural Network Prototyping Front-End    #\n");
-	printf("#             Final Built, v0.1 - 30/11/2018                    #\n");
+	printf("#             Final Built, v0.1 - 01/12/2018                    #\n");
 	printf("#                    Authors/Developer:                         #\n");
 	printf("#             Marco Chiarelli        @ UNISALENTO & CMCC        #\n");
 	printf("#               Gabriele Accarino    @ UNISALENTO & CMCC        #\n");
