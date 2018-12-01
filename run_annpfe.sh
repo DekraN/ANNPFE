@@ -9,7 +9,7 @@ function bool_to_int()
 	fi
 }
 
-TRAIN=true
+TRAIN=false
 
 ##########################################
 
@@ -22,7 +22,7 @@ N_DIM_OUT=1
 ##########################################
 N_LAG=0
 STDNORM=1
-TESTING_METHOD=true
+TESTING_METHOD=false
 NETWORK_FILENAME="kann_net.bin"
 PREDICTIONS_FILENAME="predictions.csv"
 FEATURE_SCALING_MIN=0.00

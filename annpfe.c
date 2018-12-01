@@ -326,6 +326,7 @@ static int test(kann_t *net, float *test_data, int n_test_ex, double *tot_cost, 
 	float *expected;
 	const float *y1;
 
+
 	static const float (* const denorm_functions[3])(register float, float, float, float, float) =
 	{
 		identity_denormalize,
@@ -335,21 +336,19 @@ static int test(kann_t *net, float *test_data, int n_test_ex, double *tot_cost, 
 
 	float (* denorm_function)(register float, float, float, float, float) = denorm_functions[stdnorm]; 
 
+	if((x1 = (float*)calloc(n_dim_in, sizeof(float))) == NULL)
+		return 1;
+
+	if((expected = (float*)calloc(n_dim_out, sizeof(float))) == NULL)
+		return 1;
 
 	kann_feed_bind(net, KANN_F_IN, 0, &x1);
 	kann_set_batch_size(net, 1);
 	kann_switch(net, 0);
 	out_idx = kann_find(net, KANN_F_OUT, 0);
 
-	if((x1 = (float*)calloc(n_dim_in, sizeof(float))) == NULL)
-		return 1;
-
-	if((expected = (float*)calloc(n_dim_out, sizeof(float))) == NULL)
-		return 1;
-	
 	if(net_type)
 		kann_rnn_start(net);
-
 	
 	printf("Test Begin\n");
 	printf("Number of ex: %d\n", n_test_ex);
