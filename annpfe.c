@@ -367,14 +367,12 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 			{ // loop through a mini-batch
 				for (k = 0; k < ulen; ++k)
 				{
+					
 					memset(x[k], 0, n_dim_in * mbs * sizeof(atyp));
 					memset(y[k], 0, n_dim_out * mbs * sizeof(atyp));
-
-					for (l = n_dim_out; l < n_dim_in+n_dim_out; ++l)
-						x[k][b * n_dim_in + l-n_dim_out] = train_data[(j + n_train_ex + b*ulen + k)*(n_dim_in+n_dim_out) + l] ;
-		
-					for (l = 0; l < n_dim_out; ++l)
-						y[k][b * n_dim_out + l] = train_data[(j + n_train_ex + b*ulen + k)*(n_dim_in+n_dim_out) + l];
+	
+					memcpy(&x[k][b * n_dim_in], &train_data[(j + n_train_ex + b*ulen + k)*(n_dim_in+n_dim_out) + n_dim_out], n_dim_in * sizeof(atyp));
+					memcpy(&y[k][b * n_dim_out], &train_data[(j + n_train_ex + b*ulen + k)*(n_dim_in+n_dim_out)], n_dim_out * sizeof(atyp));		
 	
 				}	
 				
@@ -484,10 +482,17 @@ static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, a
 	
 	printf("Test Begin\n");
 	printf("Number of ex: %d\n", n_test_ex);
-	fp=fopen(p_name, "w+");
+
+	if(!(fp=fopen(p_name, "w+")))
+	{
+		free(x1), free(expected);
+		fprintf(ERROR_DESC, "Unable to write on %s.\n", p_name);
+		return ERROR_FILE;
+	}
 
 	if(metrics && !(err_fd = fopen(ERROR_SCORE_FILE, "w+")))
 	{
+		fclose(fp);
 		free(x1), free(expected);
 		fprintf(ERROR_DESC, "Unable to write on "ERROR_SCORE_FILE".\n");
 		return ERROR_FILE;
@@ -497,12 +502,8 @@ static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, a
 	
 	for (i = 0; i < n_test_ex; ++i)
 	{
-		for (j = n_dim_out; j < n_dim_in+n_dim_out; ++j)
-			x1[j-n_dim_out] = test_data[i*(n_dim_in+n_dim_out) + j];
-		
-		for (k = 0; k < n_dim_out; ++k)
-			expected[k] = test_data[i*(n_dim_in+n_dim_out) + k];
-
+		memcpy(x1, &test_data[i*(n_dim_in+n_dim_out) + n_dim_out], n_dim_in * sizeof(atyp));
+		memcpy(expected, &test_data[i*(n_dim_in+n_dim_out)], n_dim_out * sizeof(atyp));
 		gettimeofday(&tp, NULL);
 		elaps += -((double)(tp.tv_sec + tp.tv_usec/1000000.0));
 		kann_eval(net, KANN_F_OUT, 0);
