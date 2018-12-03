@@ -179,8 +179,8 @@ static void normalize_minmax(atyp *vec, int size, int pitch, int max_pitch, atyp
 
 static void normalize_std(atyp *vec, int size, int pitch, int max_pitch, atyp mean, atyp var, atyp unused1, atyp unused2)
 {
-	#pragma unused unused1
-	#pragma unused unused2
+	#pragma unused(unused1)
+	#pragma unused(unused2)
 	int i;
 
 	for (i = pitch+max_pitch; i+max_pitch < size; i+=max_pitch)
@@ -190,10 +190,10 @@ static void normalize_std(atyp *vec, int size, int pitch, int max_pitch, atyp me
 
 static inline atyp identity_denormalize(register atyp y, atyp min_x, atyp max_x, atyp a, atyp b)
 {
-	#pragma unused min_x
-	#pragma unused max_x
-	#pragma unused a
-	#pragma unused b
+	#pragma unused(min_x)
+	#pragma unused(max_x)
+	#pragma unused(a)
+	#pragma unused(b)
 	return y;
 }
 
@@ -204,8 +204,8 @@ static inline atyp minmax_denormalize(register atyp y, atyp min_x, atyp max_x, a
 
 static inline atyp z_unscoring(register atyp y, atyp mean, atyp var, atyp a, atyp b)
 {
-	#pragma unused a
-	#pragma unused b
+	#pragma unused(a)
+	#pragma unused(b)
 	return y*var + mean;
 }
 
@@ -758,15 +758,15 @@ int main(int argc, char *argv[])
 	kad_trap_fe();
 	kann_srand(seed);
 
-	atyp output_feature_a[N_DIM_OUT+N_DIM_IN+n_lag];
-	atyp output_feature_b[N_DIM_OUT+N_DIM_IN+n_lag];
-	
 	atyp * output_feature_c = NULL;
 	atyp * output_feature_d = NULL;
 	atyp * train_data = NULL;
 
 	const int tot_features_lag = TOT_FEATURES+n_lag;
 	const int dataset_size = DATASET_SIZE+n_lag*N_SAMPLES-tot_features_lag*n_lag;
+
+	atyp output_feature_a[tot_features_lag];
+	atyp output_feature_b[tot_features_lag];
 
 	if(n_lag)
 	{
@@ -785,6 +785,7 @@ int main(int argc, char *argv[])
 		train_data = train_data_base;
 	
 	if(stdnorm)
+	{
 		if(stdnorm != 3)
 		{
 			atyp (* const norm_functions[2][2])(atyp [], int, int, int) =
@@ -829,8 +830,8 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
-			output_feature_c = calloc(N_DIM_IN+N_DIM_OUT+n_lag, sizeof(atyp));
-			output_feature_d = calloc(N_DIM_IN+N_DIM_OUT+n_lag, sizeof(atyp));
+			output_feature_c = calloc(tot_features_lag, sizeof(atyp));
+			output_feature_d = calloc(tot_features_lag, sizeof(atyp));
 
 			for(i=tot_features_lag-1; i>=0; --i)
 			{
@@ -847,6 +848,7 @@ int main(int argc, char *argv[])
 				printf("i is %d, out-mean: %g, out-std: %g\n", i, output_feature_c[i], output_feature_d[i]);
 			}
 		}
+	}
 	
 	if (to_apply)
 	{
