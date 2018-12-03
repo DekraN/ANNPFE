@@ -336,12 +336,9 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 				{
 					memset(x[k], 0, n_dim_in * mbs * sizeof(atyp));
 					memset(y[k], 0, n_dim_out * mbs * sizeof(atyp));
-
-					for (l = n_dim_out; l < n_dim_in+n_dim_out; ++l)
-						x[k][b * n_dim_in + l-n_dim_out] = train_data[(j + b*ulen + k)*(n_dim_in+n_dim_out) + l] ;
 		
-					for (l = 0; l < n_dim_out; ++l)
-						y[k][b * n_dim_out + l] = train_data[(j + b*ulen + k)*(n_dim_in+n_dim_out) + l];
+					memcpy(&x[k][b * n_dim_in], &train_data[(j + b*ulen + k)*(n_dim_in+n_dim_out) + n_dim_out], n_dim_in * sizeof(atyp));
+					memcpy(&y[k][b * n_dim_out], &train_data[(j + b*ulen + k)*(n_dim_in+n_dim_out)], n_dim_out * sizeof(atyp));
 	
 				}
 				
@@ -596,7 +593,7 @@ int main(int argc, char *argv[])
 	if(n_lag < 0 || n_lag > N_SAMPLES)
 	{
 		fprintf(ERROR_DESC, "Number of lag must be a positive integer.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	stdnorm = argc > 2 ? atoi(argv[2]) : STDNORM;
@@ -604,7 +601,7 @@ int main(int argc, char *argv[])
 	if(stdnorm < 0 || stdnorm > 3)
 	{
 		fprintf(ERROR_DESC, "Normal/Standard-ization method must be an integer >= 0 and <= 3.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	// test-only parameters
@@ -614,7 +611,7 @@ int main(int argc, char *argv[])
 	if(t_method != 0 && t_method != 1)
 	{
 		fprintf(ERROR_DESC, "Testing method must be a boolean number.\n");
-		return 1;
+		return ERROR_SYNTAX;
 	}
 
 	if(argc > 4)
@@ -630,7 +627,7 @@ int main(int argc, char *argv[])
 	if(feature_scaling_max < feature_scaling_min)
 	{
 		fprintf(ERROR_DESC, "Feature-scaling min must be lesser than feature-scaling max.");	
-		return 1;
+		return ERROR_SYNTAX;
 	}
 
 	net_type = argc > 8 ? atoi(argv[8]) : NET_TYPE;	
@@ -638,7 +635,7 @@ int main(int argc, char *argv[])
 	if(net_type < 0 || net_type > 3)
 	{
 		fprintf(ERROR_DESC, "Network type must be an integer >= 0 and <= 3.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	metrics = argc > 9 ? atoi(argv[9]) : METRICS;
@@ -646,7 +643,7 @@ int main(int argc, char *argv[])
 	if(metrics != 0 && metrics != 1)
 	{
 		fprintf(ERROR_DESC, "Error metrics must be a boolean number.\n");
-		return 1;
+		return ERROR_SYNTAX;
 	}
 
 	// train only parameters
@@ -656,7 +653,7 @@ int main(int argc, char *argv[])
 	if(n_h_layers <= 0)
 	{
 		fprintf(ERROR_DESC, "Number of layers must be a non-zero positive integer.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	n_h_neurons = argc > 11 ? atoi(argv[11]) : N_NEURONS;
@@ -664,7 +661,7 @@ int main(int argc, char *argv[])
 	if(n_h_neurons <= 0)
 	{
 		fprintf(ERROR_DESC, "Number of neurons must be a non-zero positive integer.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	max_epoch = argc > 12 ? atoi(argv[12]) : N_EPOCHS;
@@ -672,7 +669,7 @@ int main(int argc, char *argv[])
 	if(max_epoch <= 0)
 	{
 		fprintf(ERROR_DESC, "Max epoch must be a non-zero positive integer.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 
@@ -681,7 +678,7 @@ int main(int argc, char *argv[])
 	if(mini_size < 1)
 	{
 		fprintf(ERROR_DESC, "Minibatch size must be an integer >= 1.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 	
 	timesteps = argc > 14 ? atoi(argv[14]) : N_TIMESTEPS;
@@ -689,7 +686,7 @@ int main(int argc, char *argv[])
 	if(timesteps <= 0)
 	{
 		fprintf(ERROR_DESC, "Timesteps must be a non-zero positive integer.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	lr = argc > 15 ? ((float) atof(argv[15])) : LEARNING_RATE;
@@ -697,7 +694,7 @@ int main(int argc, char *argv[])
 	if(lr <= 0 || lr >= 1.00f)
 	{
 		fprintf(ERROR_DESC, "Learning rate must be a float > 0 and <= 1.0.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	dropout = argc > 16 ? ((float) atof(argv[16])) : DROPOUT;
@@ -705,7 +702,7 @@ int main(int argc, char *argv[])
 	if(dropout < 0 || dropout >= 1.00f)
 	{
 		fprintf(ERROR_DESC, "Dropout must be a float >= 0 and <= 1.0.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	break_score = argc > 17 ? ((float) atof(argv[17])) : BREAK_SCORE;
@@ -713,7 +710,7 @@ int main(int argc, char *argv[])
 	if(break_score < 0)
 	{
 		fprintf(ERROR_DESC, "Dropout must be a float >= 0.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	t_idx = argc > 18 ? ((float)atof(argv[18])*0.01f) : TRAINING_IDX;
@@ -721,7 +718,7 @@ int main(int argc, char *argv[])
 	if(t_idx <= 0 || t_idx >= 1.00f)
 	{
 		fprintf(ERROR_DESC, "Training index must be a float > 0%% and < 100%%.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	val_idx = argc > 19 ? ((float)atof(argv[19])*0.01f) : VALIDATION_IDX;
@@ -729,13 +726,13 @@ int main(int argc, char *argv[])
 	if(val_idx < 0 || val_idx >= 1.00f)
 	{
 		fprintf(ERROR_DESC, "Validation index must be a float >= 0\%% and <= 100%%.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	if(val_idx > t_idx)
 	{
 		fprintf(ERROR_DESC, "Training index must be greater than Validation index.\n");
-		return 1;
+		return ERROR_SYNTAX;
 	}
 
 	l_norm = argc > 20 ? atoi(argv[20]) : L_NORM;
@@ -743,7 +740,7 @@ int main(int argc, char *argv[])
 	if(l_norm != 0 && l_norm != 1)
 	{
 		fprintf(ERROR_DESC, "Layer normalization must be a boolean number.\n");
-		return 1;
+		return ERROR_SYNTAX;
 	}
 
 	n_threads = argc > 21 ? atoi(argv[21]) : N_THREADS;
@@ -751,7 +748,7 @@ int main(int argc, char *argv[])
 	if(n_threads <= 0)
 	{
 		fprintf(ERROR_DESC, "Number of threads must be a non-zero positive integer.\n");
-		return 1;	
+		return ERROR_SYNTAX;	
 	}
 
 	seed = argc > 22 ? atoi(argv[22]) : RANDOM_SEED;
@@ -906,5 +903,5 @@ int main(int argc, char *argv[])
 
 	kann_delete(ann);
 	printf("\nDeleted kann network.\n");
-	return 0;
+	return NOERROR;
 }
