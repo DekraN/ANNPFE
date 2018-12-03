@@ -7,8 +7,8 @@
 #               Gabriele Accarino    @ UNISALENTO & CMCC        #
 #                      marco_chiarelli@yahoo.it                 #
 #                      marco.chiarelli@cmcc.it                  #
-#                     gabriele.accarino@cmcc.it                	#
-#                     gabriele.accarino@unisalento.it          	#
+#                     gabriele.accarino@cmcc.it                 #
+#                     gabriele.accarino@unisalento.it           #
 #################################################################
 */
 
@@ -716,9 +716,9 @@ int main(int argc, char *argv[])
 
 	t_idx = argc > 18 ? ((float)atof(argv[18])*0.01f) : TRAINING_IDX;
 
-	if(t_idx <= 0 || t_idx >= 1.00f)
+	if(t_idx <= 0 || t_idx > 1.00f)
 	{
-		fprintf(ERROR_DESC, "Training index must be a float > 0%% and < 100%%.\n");
+		fprintf(ERROR_DESC, "Training index must be a float > 0%% and <= 100%%.\n");
 		return ERROR_SYNTAX;	
 	}
 
