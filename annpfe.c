@@ -290,7 +290,7 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 			return ERROR_FILE;
 		}			
 
-		if(!(val_fd = fopen(VALIDATION_LOSS_FILE, "w+")))
+		if(val_idx && !(val_fd = fopen(VALIDATION_LOSS_FILE, "w+")))
 		{
 			for (k = 0; k < ulen; ++k)
 			{
@@ -424,7 +424,8 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 	if(metrics)
 	{
 		fclose(train_fd);
-		fclose(val_fd);
+		if(val_idx)
+			fclose(val_fd);
 	}
 
 	free(r);
@@ -862,16 +863,16 @@ int main(int argc, char *argv[])
 		{
 			switch(net_type)
 			{
-				case 0:	
+				case ANN_FF:	
 					t = kad_sigm(kann_layer_dense(t, n_h_neurons));
 					break;
-				case 1:
+				case ANN_RNN:
 					t = kann_layer_rnn(t, n_h_neurons, rnn_flag);
 					break;
-				case 2:
+				case ANN_GRU:
 					t = kann_layer_gru(t, n_h_neurons, rnn_flag);
 					break;
-				case 3:
+				case ANN_LSTM:
 					t = kann_layer_lstm(t, n_h_neurons, rnn_flag);
 					break;
 				default:
