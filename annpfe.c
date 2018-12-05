@@ -58,7 +58,8 @@
 #define N_EPOCHS 3000
 #define LEARNING_RATE 0.001f
 #define DROPOUT 0.00f // 0.20f
-#define BREAK_SCORE 0.00f
+#define BREAK_TRAIN_SCORE 0.00f
+#define BREAK_VAL_SCORE 0.00f
 #define N_DIM_IN N_FEATURES
 #define N_TIMESTEPS 1
 #define N_MINIBATCH 1 // ONLINE LEARNING
@@ -96,6 +97,7 @@ enum
 
 enum
 {
+	ANN_RESUME = -1,
 	ANN_FF,
 	ANN_RNN,
 	ANN_GRU,
@@ -209,17 +211,18 @@ static inline atyp z_unscoring(register atyp y, atyp mean, atyp var, atyp a, aty
 	return y*var + mean;
 }
 
-static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ulen, int mbs, int max_epoch, double break_score, float train_idx, float val_idx, int n_threads, unsigned char metrics)
+static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ulen, int mbs, int max_epoch, double break_train_score, double break_val_score, float train_idx, float val_idx, int n_threads, unsigned char metrics)
 {
 	int k;
 	kann_t *ua;
 	atyp *r;
 	atyp **x, **y;
-	float best_cost = 1e30f;
 	struct timeval tp;
 	int n_var = kann_size_var(net); 
 	int n_dim_in = kann_dim_in(net);
 	int n_dim_out = kann_dim_out(net);
+	static double memory_val = 0.00f;
+	static unsigned char memory_val_cnt = 0;
 
 	int n_train_ex = (int)(train_idx*n_samples);	
 	int n_val_ex = (int)(val_idx*n_samples);
@@ -397,7 +400,7 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 
 		fprintf(TRAINING_DESC, ";\n"); 
 	
-		if(break_score && mean_train_cost <= break_score)
+		if((break_train_score && mean_train_cost <= break_train_score) || (val_idx && break_val_score && mean_val_cost <= break_val_score))
 		{
 			fprintf(stderr, "break for scoring\n");
 			break;
@@ -559,8 +562,9 @@ int main(int argc, char *argv[])
 {
 	
 	int i, j;
+	int exit_code = NOERROR;
 	kann_t *ann = NULL;
-	double break_score;
+	double break_train_score, break_val_score;
 	char *p_name = PREDICTIONS_NAME;
 	char *fn_in = NET_BINARY_NAME, *fn_out = 0;
 	float lr, dropout, t_idx, val_idx;
@@ -584,7 +588,7 @@ int main(int argc, char *argv[])
 
 	if(!strcmp(argv[1], "help"))
 	{
-		printf("USAGE: ./annpfe [n_lag] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [metrics] [n_h_layers] [n_h_neurons] [max_epoch] [minibatch_size] [timesteps] [learning_rate] [dropout] [break_score] [training_idx[\%%]] [validation_idx[\%%]] [want_layer_normalization] [n_threads] [random_seed]\n");
+		printf("USAGE: ./annpfe [n_lag] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [metrics] [n_h_layers] [n_h_neurons] [max_epoch] [minibatch_size] [timesteps] [learning_rate] [dropout] [break_train_score] [break_val_score] [training_idx[\%%]] [validation_idx[\%%]] [want_layer_normalization] [n_threads] [random_seed]\n");
 		printf("Enter executable name without params for testing.\n");	
 		return 2;
 	}
@@ -633,9 +637,9 @@ int main(int argc, char *argv[])
 
 	net_type = argc > 8 ? atoi(argv[8]) : NET_TYPE;	
 
-	if(net_type < 0 || net_type > 3)
+	if(net_type < -1 || net_type > 3)
 	{
-		fprintf(ERROR_DESC, "Network type must be an integer >= 0 and <= 3.\n");
+		fprintf(ERROR_DESC, "Network type must be an integer >= -1 and <= 3.\n");
 		return ERROR_SYNTAX;	
 	}
 
@@ -706,15 +710,23 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 
-	break_score = argc > 17 ? ((float) atof(argv[17])) : BREAK_SCORE;
+	break_train_score = argc > 17 ? ((float) atof(argv[17])) : BREAK_TRAIN_SCORE;
 
-	if(break_score < 0)
+	if(break_train_score < 0)
 	{
-		fprintf(ERROR_DESC, "Dropout must be a float >= 0.\n");
+		fprintf(ERROR_DESC, "Break-train-score must be a float >= 0.\n");
 		return ERROR_SYNTAX;	
 	}
 
-	t_idx = argc > 18 ? ((float)atof(argv[18])*0.01f) : TRAINING_IDX;
+	break_val_score = argc > 18 ? ((float) atof(argv[18])) : BREAK_VAL_SCORE;
+
+	if(break_val_score < 0)
+	{
+		fprintf(ERROR_DESC, "Break-val-score must be a float >= 0.\n");
+		return ERROR_SYNTAX;	
+	}
+
+	t_idx = argc > 19 ? ((float)atof(argv[19])*0.01f) : TRAINING_IDX;
 
 	if(t_idx <= 0 || t_idx > 1.00f)
 	{
@@ -722,7 +734,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 
-	val_idx = argc > 19 ? ((float)atof(argv[19])*0.01f) : VALIDATION_IDX;
+	val_idx = argc > 20 ? ((float)atof(argv[20])*0.01f) : VALIDATION_IDX;
 
 	if(val_idx < 0 || val_idx >= 1.00f)
 	{
@@ -736,7 +748,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;
 	}
 
-	l_norm = argc > 20 ? atoi(argv[20]) : L_NORM;
+	l_norm = argc > 21 ? atoi(argv[21]) : L_NORM;
 
 	if(l_norm != 0 && l_norm != 1)
 	{
@@ -744,7 +756,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;
 	}
 
-	n_threads = argc > 21 ? atoi(argv[21]) : N_THREADS;
+	n_threads = argc > 22 ? atoi(argv[22]) : N_THREADS;
 
 	if(n_threads <= 0)
 	{
@@ -752,7 +764,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 
-	seed = argc > 22 ? atoi(argv[22]) : RANDOM_SEED;
+	seed = argc > 23 ? atoi(argv[23]) : RANDOM_SEED;
 
 	(void) signal(SIGINT, sigexit);
 
@@ -853,40 +865,47 @@ int main(int argc, char *argv[])
 	
 	if (to_apply)
 	{
-		// model generation
-		kad_node_t *t;
-		int rnn_flag = KANN_RNN_VAR_H0;
-		if (l_norm) rnn_flag |= KANN_RNN_NORM;
-		t = kann_layer_input(N_DIM_IN+n_lag); // t = kann_layer_input(d->n_in);
-
-		for (i = 0; i < n_h_layers; ++i)
+		if(net_type != ANN_RESUME)
 		{
-			switch(net_type)
+			// model generation
+			kad_node_t *t;
+			int rnn_flag = KANN_RNN_VAR_H0;
+			if (l_norm) rnn_flag |= KANN_RNN_NORM;
+			t = kann_layer_input(N_DIM_IN+n_lag); // t = kann_layer_input(d->n_in);
+
+			for (i = 0; i < n_h_layers; ++i)
 			{
-				case ANN_FF:	
-					t = kad_sigm(kann_layer_dense(t, n_h_neurons));
-					break;
-				case ANN_RNN:
-					t = kann_layer_rnn(t, n_h_neurons, rnn_flag);
-					break;
-				case ANN_GRU:
-					t = kann_layer_gru(t, n_h_neurons, rnn_flag);
-					break;
-				case ANN_LSTM:
-					t = kann_layer_lstm(t, n_h_neurons, rnn_flag);
-					break;
-				default:
-					break;
+				switch(net_type)
+				{		
+					case ANN_FF:	
+						t = kad_sigm(kann_layer_dense(t, n_h_neurons));
+						break;
+					case ANN_RNN:
+						t = kann_layer_rnn(t, n_h_neurons, rnn_flag);
+						break;
+					case ANN_GRU:
+						t = kann_layer_gru(t, n_h_neurons, rnn_flag);
+						break;
+					case ANN_LSTM:
+						t = kann_layer_lstm(t, n_h_neurons, rnn_flag);
+						break;
+					default:
+						break;
+				}
+
+				if(dropout)
+					t = kann_layer_dropout(t, dropout);
 			}
 
-			if(dropout)
-				t = kann_layer_dropout(t, dropout);
+			ann = kann_new(kann_layer_cost(t, N_DIM_OUT, KANN_C_MSE), 0);
 		}
+		else
+			ann = kann_load(fn_in);
 
-		ann = kann_new(kann_layer_cost(t, N_DIM_OUT, KANN_C_MSE), 0);
 		printf("\nTRAINING...\n");
+		exit_code = train(ann, train_data, N_SAMPLES-n_lag, lr, timesteps, mini_size, max_epoch, break_train_score, break_val_score, t_idx, val_idx, n_threads, metrics);
 
-		if(!train(ann, train_data, N_SAMPLES-n_lag, lr, timesteps, mini_size, max_epoch, break_score, t_idx, val_idx, n_threads, metrics)) 
+		if(!exit_code) 
 		{
 			kann_save(fn_in, ann);
 			printf("\nTraining succeeded!\n");
@@ -898,8 +917,7 @@ int main(int argc, char *argv[])
 		double tot_cost = 0.00;
 		ann = kann_load(fn_in);
 		printf("\nTEST...\n");
-
-		const int exit_code = t_method ? test(ann, &train_data[(int)(tot_features_lag*(N_SAMPLES-n_lag)*(t_idx+val_idx))], N_SAMPLES - (int)(N_SAMPLES*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max) : test(ann, train_data, N_SAMPLES-n_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max);	
+		exit_code = t_method ? test(ann, &train_data[(int)(tot_features_lag*(N_SAMPLES-n_lag)*(t_idx+val_idx))], N_SAMPLES - (int)(N_SAMPLES*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max) : test(ann, train_data, N_SAMPLES-n_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max);	
 
 		if(!exit_code) 		
 			printf("\nTest total cost: %g\n", tot_cost);
@@ -907,5 +925,5 @@ int main(int argc, char *argv[])
 
 	kann_delete(ann);
 	printf("\nDeleted kann network.\n");
-	return NOERROR;
+	return exit_code;
 }
