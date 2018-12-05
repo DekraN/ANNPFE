@@ -885,7 +885,8 @@ int main(int argc, char *argv[])
 
 		ann = kann_new(kann_layer_cost(t, N_DIM_OUT, KANN_C_MSE), 0);
 		printf("\nTRAINING...\n");
-		if(!train(ann, train_data, N_SAMPLES-n_lag, lr, net_type ? timesteps : 1, mini_size, max_epoch, break_score, t_idx, val_idx, n_threads, metrics)) 
+
+		if(!train(ann, train_data, N_SAMPLES-n_lag, lr, timesteps, mini_size, max_epoch, break_score, t_idx, val_idx, n_threads, metrics)) 
 		{
 			kann_save(fn_in, ann);
 			printf("\nTraining succeeded!\n");
