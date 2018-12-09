@@ -454,9 +454,9 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 	return NOERROR;
 }
 
-static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, atyp *min_x, atyp *max_x, atyp *mean, atyp *std, char * p_name, unsigned char net_type, unsigned char stdnorm, unsigned char metrics, atyp a, atyp b)
+static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, atyp *min_x, atyp *max_x, atyp *mean, atyp *std, char * p_name, int mbs, unsigned char net_type, unsigned char stdnorm, unsigned char metrics, atyp a, atyp b)
 {
-	int i, j, k, l;
+	int i, j, bs, k, l;
 	struct timeval tp;
 	FILE * fp, * err_fd;
 	atyp y1_denorm;
@@ -479,13 +479,13 @@ static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, a
 
 	atyp (* denorm_function)(register atyp, atyp, atyp, atyp, atyp) = denorm_functions[stdnorm]; 
 
-	if((x1 = (atyp*)calloc(n_dim_in, sizeof(atyp))) == NULL)
+	if((x1 = (atyp*)calloc(n_dim_in*mbs, sizeof(atyp))) == NULL)
 	{
 		fprintf(ERROR_DESC, "Memory error on input vector allocation.\n");
 		return ERROR_MEMORY; 
 	}
 
-	if((expected = (atyp*)calloc(n_dim_out, sizeof(atyp))) == NULL)
+	if((expected = (atyp*)calloc(n_dim_out*mbs, sizeof(atyp))) == NULL)
 	{
 		free(x1);
 		fprintf(ERROR_DESC, "Memory error on expected vector allocation.\n");
@@ -519,43 +519,55 @@ static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, a
 	}
 
 	// fprintf(fp, ",0\n");
-	
-	for (i = 0; i < n_test_ex; ++i)
+
+	int mbs_max;
+
+	for (j = 0; j < n_test_ex; j += mbs)
 	{
-		memcpy(x1, &test_data[i*(n_dim_in+n_dim_out) + n_dim_out], n_dim_in * sizeof(atyp));
-		memcpy(expected, &test_data[i*(n_dim_in+n_dim_out)], n_dim_out * sizeof(atyp));
+		mbs_max = n_test_ex-j < mbs ? n_test_ex-j : mbs;
+
+		for (bs = 0; bs < mbs_max; ++bs)
+		{
+			memcpy(&x1[bs*n_dim_in], &test_data[(j+bs)*(n_dim_in+n_dim_out) + n_dim_out], n_dim_in * sizeof(atyp));
+			memcpy(&expected[bs*n_dim_out], &test_data[(j+bs)*(n_dim_in+n_dim_out)], n_dim_out * sizeof(atyp));
+		}
+
+		kann_set_batch_size(net, mbs_max);
 		gettimeofday(&tp, NULL);
 		elaps += -((double)(tp.tv_sec + tp.tv_usec/1000000.0));
 		kann_eval(net, KANN_F_OUT, 0);
 		y1 = net->v[out_idx]->x;
 		gettimeofday(&tp, NULL);
 		elaps += ((double)(tp.tv_sec + tp.tv_usec/1000000.0));
-		fprintf(fp, "%d", i+1);
+		fprintf(fp, "%d", (j+bs)+1);
 
-		if(metrics)
-			fprintf(err_fd, "%d", i+1);
+		for (bs = 0; bs < mbs_max; ++bs)
+		{		
+			if(metrics)
+				fprintf(err_fd, "%d", (j+bs)+1);
 
-		cur_cost = 0.00f;
+			cur_cost = 0.00f;
 
-		for (l = 0; l < n_dim_out; ++l)
-		{
-			y1_denorm = stdnorm == 3 ? z_unscoring(minmax_denormalize(y1[l], min_x[l], max_x[l], a, b), mean[l], std[l], a, b) : denorm_function(y1[l], min_x[l], max_x[l], a, b);
+			for (l = 0; l < n_dim_out; ++l)
+			{	
+				y1_denorm = stdnorm == 3 ? z_unscoring(minmax_denormalize(y1[bs*n_dim_out+l], min_x[l], max_x[l], a, b), mean[l], std[l], a, b) : denorm_function(y1[l], min_x[l], max_x[l], a, b);
 
-			fprintf(fp, ",%g", y1_denorm);
+				fprintf(fp, ",%g", y1_denorm);
+
+				if(metrics)
+					fprintf(err_fd, ",%g", y1_denorm - expected[l]);
+
+				cur_cost += (y1_denorm - expected[l])*(y1_denorm - expected[l]);
+			}
+		
+			fprintf(fp, "\n");
 
 			if(metrics)
-				fprintf(err_fd, ",%g", y1_denorm - expected[l]);
+				fprintf(err_fd, "\n");
 
-			cur_cost += (y1_denorm - expected[l])*(y1_denorm - expected[l]);
+			cur_cost /= n_dim_out;
+			*tot_cost += cur_cost;
 		}
-	
-		fprintf(fp, "\n");
-
-		if(metrics)
-			fprintf(err_fd, "\n");
-
-		cur_cost /= n_dim_out;
-		*tot_cost += cur_cost;
 	}
 
 	fclose(fp);
@@ -607,7 +619,7 @@ int main(int argc, char *argv[])
 
 	if(!strcmp(argv[1], "help"))
 	{
-		printf("USAGE: ./annpfe [n_lag] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [verbose] [metrics] [n_h_layers] [n_h_neurons] [max_epoch] [minibatch_size] [timesteps] [learning_rate] [dropout] [activation_f] [break_train_score] [break_val_score] [training_idx[\%%]] [validation_idx[\%%]] [want_layer_normalization] [n_threads] [random_seed]\n");
+		printf("USAGE: ./annpfe [n_lag] [minibatch_size] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [verbose] [metrics] [n_h_layers] [n_h_neurons] [max_epoch] [timesteps] [learning_rate] [dropout] [activation_f] [break_train_score] [break_val_score] [training_idx[\%%]] [validation_idx[\%%]] [want_layer_normalization] [n_threads] [random_seed]\n");
 		printf("Enter executable name without params for testing.\n");	
 		return 2;
 	}
@@ -620,7 +632,15 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 
-	stdnorm = argc > 2 ? atoi(argv[2]) : STDNORM;
+	mini_size = argc > 2 ? atoi(argv[2]) : N_MINIBATCH;
+
+	if(mini_size < 1)
+	{
+		fprintf(ERROR_DESC, "Minibatch size must be an integer >= 1.\n");
+		return ERROR_SYNTAX;	
+	}
+
+	stdnorm = argc > 3 ? atoi(argv[3]) : STDNORM;
 
 	if(stdnorm < 0 || stdnorm > 3)
 	{
@@ -630,7 +650,7 @@ int main(int argc, char *argv[])
 
 	// test-only parameters
 
-	t_method = argc > 3 ? atoi(argv[3]): TESTING_METHOD;
+	t_method = argc > 4 ? atoi(argv[4]): TESTING_METHOD;
 
 	if(t_method != 0 && t_method != 1)
 	{
@@ -638,15 +658,15 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;
 	}
 
-	if(argc > 4)
-		fn_in = argv[4];
-
 	if(argc > 5)
-		p_name = argv[5];
+		fn_in = argv[5];
+
+	if(argc > 6)
+		p_name = argv[6];
 
 
-	feature_scaling_min = argc > 6 ? atof(argv[6]) : FEATURE_SCALING_MIN;
-	feature_scaling_max = argc > 7 ? atof(argv[7]) : FEATURE_SCALING_MAX;
+	feature_scaling_min = argc > 7 ? atof(argv[7]) : FEATURE_SCALING_MIN;
+	feature_scaling_max = argc > 8 ? atof(argv[8]) : FEATURE_SCALING_MAX;
 
 	if(feature_scaling_max < feature_scaling_min)
 	{
@@ -654,7 +674,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;
 	}
 
-	net_type = argc > 8 ? atoi(argv[8]) : NET_TYPE;	
+	net_type = argc > 9 ? atoi(argv[9]) : NET_TYPE;	
 
 	if(net_type < -1 || net_type > COMMON_LAYERS-1)
 	{
@@ -662,7 +682,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 	
-	verbose = argc > 9 ? atoi(argv[9]) : VERBOSE;
+	verbose = argc > 10 ? atoi(argv[10]) : VERBOSE;
 	
 	if(verbose != 0 && verbose != 1)
 	{
@@ -670,7 +690,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;
 	}
 
-	metrics = argc > 10 ? atoi(argv[10]) : METRICS;
+	metrics = argc > 11 ? atoi(argv[11]) : METRICS;
 
 	if(metrics != 0 && metrics != 1)
 	{
@@ -680,7 +700,7 @@ int main(int argc, char *argv[])
 
 	// train only parameters
 
-	n_h_layers = argc > 11 ? atoi(argv[11]) : N_H_LAYERS;	
+	n_h_layers = argc > 12 ? atoi(argv[12]) : N_H_LAYERS;	
 
 	if(n_h_layers <= 0)
 	{
@@ -688,7 +708,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 
-	n_h_neurons = argc > 12 ? atoi(argv[12]) : N_NEURONS;
+	n_h_neurons = argc > 13 ? atoi(argv[13]) : N_NEURONS;
 
 	if(n_h_neurons <= 0)
 	{
@@ -696,20 +716,11 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 
-	max_epoch = argc > 13 ? atoi(argv[13]) : N_EPOCHS;
+	max_epoch = argc > 14 ? atoi(argv[14]) : N_EPOCHS;
 
 	if(max_epoch <= 0)
 	{
 		fprintf(ERROR_DESC, "Max epochs must be a non-zero positive integer.\n");
-		return ERROR_SYNTAX;	
-	}
-
-
-	mini_size = argc > 14 ? atoi(argv[14]) : N_MINIBATCH;
-
-	if(mini_size < 1)
-	{
-		fprintf(ERROR_DESC, "Minibatch size must be an integer >= 1.\n");
 		return ERROR_SYNTAX;	
 	}
 	
@@ -823,6 +834,7 @@ int main(int argc, char *argv[])
 		printf("#################################################################\n");
 		printf("-----------------------------------------------------------------\n"); 
 		printf("Number of Lag = %d                                               \n", n_lag);
+		printf("Minibatch size                 = %d;                             \n", mini_size);
 		printf("Normal/Standard-ization method = %d;                             \n", stdnorm);
 		printf("Testing method                 = %d;                             \n", t_method);
 		printf("Network filename               = %s ;                            \n", fn_in);
@@ -834,7 +846,6 @@ int main(int argc, char *argv[])
 		printf("Number of layers               = %d;                             \n", n_h_layers);
 		printf("Number of neurons              = %d;                             \n", n_h_neurons);
 		printf("Max epochs                     = %d;                             \n", max_epoch);
-		printf("Minibatch size                 = %d;                             \n", mini_size);
 		printf("Timesteps                      = %d;                             \n", timesteps);
 		printf("Learning rate                  = %g;                             \n", lr);
 		printf("Dropout                        = %g;                             \n", dropout);
@@ -1003,7 +1014,7 @@ int main(int argc, char *argv[])
 		double tot_cost = 0.00;
 		ann = kann_load(fn_in);
 		printf("\nTEST...\n");
-		exit_code = t_method ? test(ann, &train_data[(int)(tot_features_lag*(N_SAMPLES-n_lag)*(t_idx+val_idx))], N_SAMPLES - (int)(N_SAMPLES*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max) : test(ann, train_data, N_SAMPLES-n_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max);	
+		exit_code = t_method ? test(ann, &train_data[(int)(tot_features_lag*(N_SAMPLES-n_lag)*(t_idx+val_idx))], N_SAMPLES - (int)(N_SAMPLES*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, mini_size, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max) : test(ann, train_data, N_SAMPLES-n_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, mini_size, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max);	
 
 		if(!exit_code) 		
 			printf("\nTest total cost: %g\n", tot_cost);
