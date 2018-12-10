@@ -99,14 +99,29 @@ enum
 	ERROR_UNKNOWN
 };
 
-enum
+typedef enum
 {
 	ANN_RESUME = -1,
 	ANN_FF,
 	ANN_RNN,
 	ANN_GRU,
 	ANN_LSTM
-};
+} ann_layers;
+
+typedef enum
+{
+	ANN_NONE,
+	ANN_SQUARE,
+	ANN_SIGM,
+	ANN_TANH,
+	ANN_RELU,
+	ANN_SOFTMAX,
+	ANN_1MINUS,
+	ANN_EXP,	
+	ANN_LOG,
+	ANN_SIN
+} ann_acfuncs;
+	
 
 static unsigned char train_exec = 1;
 
@@ -593,7 +608,9 @@ int main(int argc, char *argv[])
 {
 	
 	int i, j;
-	int exit_code = NOERROR;
+	ann_layers net_type;
+	ann_acfuncs activation;
+	int exit_code;
 	kann_t *ann = NULL;
 	double break_train_score, break_val_score;
 	char *p_name = PREDICTIONS_NAME;
@@ -601,7 +618,8 @@ int main(int argc, char *argv[])
 	float lr, dropout, t_idx, val_idx;
 	atyp feature_scaling_min, feature_scaling_max;
 	const unsigned char to_apply = argc > 12;
-	int net_type, verbose, metrics, activation, n_h_layers, n_h_neurons, mini_size, timesteps, max_epoch, t_method, n_lag, stdnorm, l_norm, n_threads, seed;
+	
+	int verbose, metrics, n_h_layers, n_h_neurons, mini_size, timesteps, max_epoch, t_method, n_lag, stdnorm, l_norm, n_threads, seed;
 
 	printf("\n\n#################################################################\n");
 	printf("#   ANNPFE - Artificial Neural Network Prototyping Front-End    #\n");
