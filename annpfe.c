@@ -600,7 +600,7 @@ int main(int argc, char *argv[])
 	char *fn_in = NET_BINARY_NAME, *fn_out = 0;
 	float lr, dropout, t_idx, val_idx;
 	atyp feature_scaling_min, feature_scaling_max;
-	const unsigned char to_apply = argc > 11;
+	const unsigned char to_apply = argc > 12;
 	int net_type, verbose, metrics, activation, n_h_layers, n_h_neurons, mini_size, timesteps, max_epoch, t_method, n_lag, stdnorm, l_norm, n_threads, seed;
 
 	printf("\n\n#################################################################\n");
