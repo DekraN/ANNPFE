@@ -342,7 +342,6 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 	kann_feed_bind(ua, KANN_F_IN,    0, x); // bind _x_ to input nodes
 	kann_feed_bind(ua, KANN_F_TRUTH, 0, y); // bind _y_ to truth nodes
 	kann_set_batch_size(ua, mbs);
-	kann_switch(ua, 1);
 
 	if(n_threads > 1)
 		kann_mt(ua, n_threads, n_threads);
@@ -508,7 +507,6 @@ static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, a
 	}
 
 	kann_feed_bind(net, KANN_F_IN, 0, &x1);
-	kann_set_batch_size(net, mbs);
 	kann_switch(net, 0);
 	out_idx = kann_find(net, KANN_F_OUT, 0);
 
