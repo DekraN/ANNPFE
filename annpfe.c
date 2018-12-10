@@ -508,7 +508,7 @@ static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, a
 	}
 
 	kann_feed_bind(net, KANN_F_IN, 0, &x1);
-	kann_set_batch_size(net, 1);
+	kann_set_batch_size(net, mbs);
 	kann_switch(net, 0);
 	out_idx = kann_find(net, KANN_F_OUT, 0);
 
