@@ -443,7 +443,7 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 
 	gettimeofday(&tp, NULL);
 	elaps += ((double)(tp.tv_sec + tp.tv_usec/1000000.0));
-	printf("\nAverage test time: %lf\n", elaps);
+	printf("\nAverage training time: %lf\n", elaps);
 	
 	for (k = 0; k < ulen; ++k)
 	{
