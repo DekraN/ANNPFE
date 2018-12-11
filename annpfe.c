@@ -552,10 +552,11 @@ static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, a
 		y1 = net->v[out_idx]->x;
 		gettimeofday(&tp, NULL);
 		elaps += ((double)(tp.tv_sec + tp.tv_usec/1000000.0));
-		fprintf(fp, "%d", (j+bs)+1);
 
 		for (bs = 0; bs < mbs_max; ++bs)
 		{		
+			fprintf(fp, "%d", (j+bs)+1);
+
 			if(metrics)
 				fprintf(err_fd, "%d", (j+bs)+1);
 
@@ -563,14 +564,14 @@ static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, a
 
 			for (l = 0; l < n_dim_out; ++l)
 			{	
-				y1_denorm = stdnorm == 3 ? z_unscoring(minmax_denormalize(y1[bs*n_dim_out+l], min_x[l], max_x[l], a, b), mean[l], std[l], a, b) : denorm_function(y1[l], min_x[l], max_x[l], a, b);
+				y1_denorm = stdnorm == 3 ? z_unscoring(minmax_denormalize(y1[bs*n_dim_out+l], min_x[l], max_x[l], a, b), mean[l], std[l], a, b) : denorm_function(y1[bs*n_dim_out+l], min_x[l], max_x[l], a, b);
 
 				fprintf(fp, ",%g", y1_denorm);
 
 				if(metrics)
-					fprintf(err_fd, ",%g", y1_denorm - expected[l]);
+					fprintf(err_fd, ",%g", y1_denorm - expected[bs*n_dim_out]);
 
-				cur_cost += (y1_denorm - expected[l])*(y1_denorm - expected[l]);
+				cur_cost += (y1_denorm - expected[bs*n_dim_out])*(y1_denorm - expected[bs*n_dim_out]);
 			}
 		
 			fprintf(fp, "\n");
@@ -716,117 +717,121 @@ int main(int argc, char *argv[])
 
 	// train only parameters
 
-	n_h_layers = argc > 12 ? atoi(argv[12]) : N_H_LAYERS;	
-
-	if(n_h_layers <= 0)
+	if(to_apply)
 	{
-		fprintf(ERROR_DESC, "Number of layers must be a non-zero positive integer.\n");
-		return ERROR_SYNTAX;	
+
+		n_h_layers = atoi(argv[12]);	
+
+		if(n_h_layers <= 0)
+		{
+			fprintf(ERROR_DESC, "Number of layers must be a non-zero positive integer.\n");
+			return ERROR_SYNTAX;	
+		}
+
+		n_h_neurons = argc > 13 ? atoi(argv[13]) : N_NEURONS;
+
+		if(n_h_neurons <= 0)
+		{
+			fprintf(ERROR_DESC, "Number of neurons must be a non-zero positive integer.\n");
+			return ERROR_SYNTAX;	
+		}
+
+		max_epoch = argc > 14 ? atoi(argv[14]) : N_EPOCHS;
+
+		if(max_epoch <= 0)
+		{
+			fprintf(ERROR_DESC, "Max epochs must be a non-zero positive integer.\n");
+			return ERROR_SYNTAX;	
+		}
+		
+		timesteps = argc > 15 ? atoi(argv[15]) : N_TIMESTEPS;
+
+		if(timesteps <= 0)
+		{
+			fprintf(ERROR_DESC, "Timesteps must be a non-zero positive integer.\n");
+			return ERROR_SYNTAX;	
+		}
+
+		lr = argc > 16 ? ((float) atof(argv[16])) : LEARNING_RATE;
+
+		if(lr <= 0 || lr >= 1.00f)
+		{
+			fprintf(ERROR_DESC, "Learning rate must be a float > 0 and <= 1.0.\n");
+			return ERROR_SYNTAX;	
+		}
+
+		dropout = argc > 17 ? ((float) atof(argv[17])) : DROPOUT;
+
+		if(dropout < 0 || dropout >= 1.00f)
+		{
+			fprintf(ERROR_DESC, "Dropout must be a float >= 0 and <= 1.0.\n");
+			return ERROR_SYNTAX;	
+		}
+
+		activation = argc > 18 ? atoi(argv[18]) : ACTIVATION_FUNCTION;
+
+		if(activation < 0 || activation > ACTIVATION_FUNCTIONS-1)
+		{
+			fprintf(ERROR_DESC, "Activation function type must be an integer >= 0 and <= %d.\n", ACTIVATION_FUNCTIONS-1);
+			return ERROR_SYNTAX;	
+		}
+
+		break_train_score = argc > 19 ? ((float) atof(argv[19])) : BREAK_TRAIN_SCORE;
+
+		if(break_train_score < 0)
+		{
+			fprintf(ERROR_DESC, "Break-train-score must be a float >= 0.\n");
+			return ERROR_SYNTAX;	
+		}
+
+		break_val_score = argc > 20 ? ((float) atof(argv[20])) : BREAK_VAL_SCORE;
+
+		if(break_val_score < 0)
+		{
+			fprintf(ERROR_DESC, "Break-val-score must be a float >= 0.\n");
+			return ERROR_SYNTAX;	
+		}
+
+		t_idx = argc > 21 ? ((float)atof(argv[21])*0.01f) : TRAINING_IDX;
+
+		if(t_idx <= 0 || t_idx > 1.00f)
+		{
+			fprintf(ERROR_DESC, "Training index must be a float > 0%% and <= 100%%.\n");
+			return ERROR_SYNTAX;	
+		}
+
+		val_idx = argc > 22 ? ((float)atof(argv[22])*0.01f) : VALIDATION_IDX;
+
+		if(val_idx < 0 || val_idx >= 1.00f)
+		{
+			fprintf(ERROR_DESC, "Validation index must be a float >= 0\%% and <= 100%%.\n");
+			return ERROR_SYNTAX;	
+		}
+
+		if(val_idx > t_idx)
+		{
+			fprintf(ERROR_DESC, "Training index must be greater than Validation index.\n");
+			return ERROR_SYNTAX;
+		}
+
+		l_norm = argc > 23 ? atoi(argv[23]) : L_NORM;
+
+		if(l_norm != 0 && l_norm != 1)
+		{
+			fprintf(ERROR_DESC, "Layer normalization must be a boolean number.\n");
+			return ERROR_SYNTAX;
+		}
+
+		n_threads = argc > 24 ? atoi(argv[24]) : N_THREADS;
+
+		if(n_threads <= 0)
+		{
+			fprintf(ERROR_DESC, "Number of threads must be a non-zero positive integer.\n");
+			return ERROR_SYNTAX;	
+		}
+
+		seed = argc > 25 ? atoi(argv[25]) : RANDOM_SEED;
 	}
-
-	n_h_neurons = argc > 13 ? atoi(argv[13]) : N_NEURONS;
-
-	if(n_h_neurons <= 0)
-	{
-		fprintf(ERROR_DESC, "Number of neurons must be a non-zero positive integer.\n");
-		return ERROR_SYNTAX;	
-	}
-
-	max_epoch = argc > 14 ? atoi(argv[14]) : N_EPOCHS;
-
-	if(max_epoch <= 0)
-	{
-		fprintf(ERROR_DESC, "Max epochs must be a non-zero positive integer.\n");
-		return ERROR_SYNTAX;	
-	}
-	
-	timesteps = argc > 15 ? atoi(argv[15]) : N_TIMESTEPS;
-
-	if(timesteps <= 0)
-	{
-		fprintf(ERROR_DESC, "Timesteps must be a non-zero positive integer.\n");
-		return ERROR_SYNTAX;	
-	}
-
-	lr = argc > 16 ? ((float) atof(argv[16])) : LEARNING_RATE;
-
-	if(lr <= 0 || lr >= 1.00f)
-	{
-		fprintf(ERROR_DESC, "Learning rate must be a float > 0 and <= 1.0.\n");
-		return ERROR_SYNTAX;	
-	}
-
-	dropout = argc > 17 ? ((float) atof(argv[17])) : DROPOUT;
-
-	if(dropout < 0 || dropout >= 1.00f)
-	{
-		fprintf(ERROR_DESC, "Dropout must be a float >= 0 and <= 1.0.\n");
-		return ERROR_SYNTAX;	
-	}
-
-	activation = argc > 18 ? atoi(argv[18]) : ACTIVATION_FUNCTION;
-
-	if(activation < 0 || activation > ACTIVATION_FUNCTIONS-1)
-	{
-		fprintf(ERROR_DESC, "Activation function type must be an integer >= 0 and <= %d.\n", ACTIVATION_FUNCTIONS-1);
-		return ERROR_SYNTAX;	
-	}
-
-	break_train_score = argc > 19 ? ((float) atof(argv[19])) : BREAK_TRAIN_SCORE;
-
-	if(break_train_score < 0)
-	{
-		fprintf(ERROR_DESC, "Break-train-score must be a float >= 0.\n");
-		return ERROR_SYNTAX;	
-	}
-
-	break_val_score = argc > 20 ? ((float) atof(argv[20])) : BREAK_VAL_SCORE;
-
-	if(break_val_score < 0)
-	{
-		fprintf(ERROR_DESC, "Break-val-score must be a float >= 0.\n");
-		return ERROR_SYNTAX;	
-	}
-
-	t_idx = argc > 21 ? ((float)atof(argv[21])*0.01f) : TRAINING_IDX;
-
-	if(t_idx <= 0 || t_idx > 1.00f)
-	{
-		fprintf(ERROR_DESC, "Training index must be a float > 0%% and <= 100%%.\n");
-		return ERROR_SYNTAX;	
-	}
-
-	val_idx = argc > 22 ? ((float)atof(argv[22])*0.01f) : VALIDATION_IDX;
-
-	if(val_idx < 0 || val_idx >= 1.00f)
-	{
-		fprintf(ERROR_DESC, "Validation index must be a float >= 0\%% and <= 100%%.\n");
-		return ERROR_SYNTAX;	
-	}
-
-	if(val_idx > t_idx)
-	{
-		fprintf(ERROR_DESC, "Training index must be greater than Validation index.\n");
-		return ERROR_SYNTAX;
-	}
-
-	l_norm = argc > 23 ? atoi(argv[23]) : L_NORM;
-
-	if(l_norm != 0 && l_norm != 1)
-	{
-		fprintf(ERROR_DESC, "Layer normalization must be a boolean number.\n");
-		return ERROR_SYNTAX;
-	}
-
-	n_threads = argc > 24 ? atoi(argv[24]) : N_THREADS;
-
-	if(n_threads <= 0)
-	{
-		fprintf(ERROR_DESC, "Number of threads must be a non-zero positive integer.\n");
-		return ERROR_SYNTAX;	
-	}
-
-	seed = argc > 25 ? atoi(argv[25]) : RANDOM_SEED;
 
 	(void) signal(SIGINT, sigexit);
 
@@ -858,22 +863,28 @@ int main(int argc, char *argv[])
 		printf("Feature Scaling min            = %g;                             \n", feature_scaling_min);
 		printf("Feature Scaling max            = %g;                             \n", feature_scaling_max);
 		printf("Network type                   = %d;                             \n", net_type);
+		printf("Verbose                        = %d;                             \n", verbose);
 		printf("Metrics                        = %d;                             \n", metrics);
-		printf("Number of layers               = %d;                             \n", n_h_layers);
-		printf("Number of neurons              = %d;                             \n", n_h_neurons);
-		printf("Max epochs                     = %d;                             \n", max_epoch);
-		printf("Timesteps                      = %d;                             \n", timesteps);
-		printf("Learning rate                  = %g;                             \n", lr);
-		printf("Dropout                        = %g;                             \n", dropout);
-		printf("Break-train-score              = %g;                             \n", break_train_score);
-		printf("Break-val-score                = %g;                             \n", break_val_score);
-		printf("Training index                 = %g;                             \n", t_idx);
-		printf("Validation index               = %g;                             \n", val_idx);
-		printf("Layer normalization            = %d;                             \n", l_norm);
-		printf("Number of threads              = %d;                             \n", n_threads);
-		printf("Random seed                    = %d;                             \n", seed);
+		if(to_apply)
+		{
+			printf("Number of layers               = %d;                             \n", n_h_layers);
+			printf("Number of neurons              = %d;                             \n", n_h_neurons);
+			printf("Max epochs                     = %d;                             \n", max_epoch);
+			printf("Timesteps                      = %d;                             \n", timesteps);
+			printf("Learning rate                  = %g;                             \n", lr);
+			printf("Dropout                        = %g;                             \n", dropout);
+			printf("Break-train-score              = %g;                             \n", break_train_score);
+			printf("Break-val-score                = %g;                             \n", break_val_score);
+			printf("Training index                 = %g;                             \n", t_idx);
+			printf("Validation index               = %g;                             \n", val_idx);
+			printf("Layer normalization            = %d;                             \n", l_norm);
+			printf("Number of threads              = %d;                             \n", n_threads);
+			printf("Random seed                    = %d;                             \n", seed);
+		}
 		printf("-----------------------------------------------------------------\n\n");
 	}
+
+	(void) getchar();
 
 	kad_node_t * (* const activations_functions[ACTIVATION_FUNCTIONS])(kad_node_t *) =
 	{
