@@ -484,7 +484,7 @@ static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, a
 	const atyp *y1;
 
 
-	static const atyp (* const denorm_functions[3])(register atyp, atyp, atyp, atyp, atyp) =
+	static atyp (* const denorm_functions[3])(register atyp, atyp, atyp, atyp, atyp) =
 	{
 		identity_denormalize,
 		minmax_denormalize,
