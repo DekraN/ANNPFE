@@ -649,6 +649,12 @@ int main(int argc, char *argv[])
 	input_file = argc > 1 ? argv[1] : INPUT_FILE;
 	char * delim = argc > 2 ? argv[2] : DELIMITER;
 
+	if(strlen(delim) > 1)
+	{
+		fprintf(ERROR_DESC, "Delimiter must be a unique character.\n");
+		return ERROR_SYNTAX;
+	}
+
 	n_lag = argc > 3 ? atoi(argv[3]) : N_LAG;
 
 	if(n_lag < 0 || n_lag > N_SAMPLES)
@@ -866,15 +872,15 @@ int main(int argc, char *argv[])
 		if( dynamic_dataset )
 		{
 			
-			printf("Input file                     = %s ;                            \n", input_file);
+			printf("Input file                     = \"%s\" ;                            \n", input_file);
 			printf("Delimiter                      = %c ;                            \n", delim[0]);
 		}
 		printf("Number of Lag = %d                                               \n", n_lag);
 		printf("Minibatch size                 = %d;                             \n", mini_size);
 		printf("Normal/Standard-ization method = %d;                             \n", stdnorm);
 		printf("Testing method                 = %d;                             \n", t_method);
-		printf("Network filename               = %s ;                            \n", fn_in);
-		printf("Predictions filename           = %s ;                            \n", p_name);
+		printf("Network filename               = \"%s\" ;                            \n", fn_in);
+		printf("Predictions filename           = \"%s\" ;                            \n", p_name);
 		printf("Feature Scaling min            = %g;                             \n", feature_scaling_min);
 		printf("Feature Scaling max            = %g;                             \n", feature_scaling_max);
 		printf("Network type                   = %d;                             \n", net_type);
