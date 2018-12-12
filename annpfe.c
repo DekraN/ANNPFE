@@ -1,7 +1,7 @@
 /*
 #################################################################
 #   ANNPFE - Artificial Neural Network Prototyping Front-End    #
-#             Final Built, v0.1 - 01/12/2018                    #
+#             Final Built, v0.1 - 12/12/2018                    #
 #                    Authors/Developer:                         #
 #             Marco Chiarelli        @ UNISALENTO & CMCC        #
 #               Gabriele Accarino    @ UNISALENTO & CMCC        #
@@ -87,6 +87,10 @@
 #define ERROR_DESC stderr
 #define NET_BINARY_NAME "kann_net.bin"
 #define PREDICTIONS_NAME "predictions.csv"
+#define INPUT_FILE "none"
+#define DELIMITER ","
+
+#define LINE_MAX_LEN 2048
 
 #include DATASET
 
@@ -605,24 +609,25 @@ static void sigexit(int sign)
 
 int main(int argc, char *argv[])
 {
-	
+	FILE * fp;	
 	int i, j;
 	ann_layers net_type;
 	ann_acfuncs activation;
 	int exit_code;
 	kann_t *ann = NULL;
 	double break_train_score, break_val_score;
+	char *input_file = INPUT_FILE;
 	char *p_name = PREDICTIONS_NAME;
 	char *fn_in = NET_BINARY_NAME, *fn_out = 0;
 	float lr, dropout, t_idx, val_idx;
 	atyp feature_scaling_min, feature_scaling_max;
-	const unsigned char to_apply = argc > 12;
+	const unsigned char to_apply = argc > 14;
 	
 	int verbose, metrics, n_h_layers, n_h_neurons, mini_size, timesteps, max_epoch, t_method, n_lag, stdnorm, l_norm, n_threads, seed;
 
 	printf("\n\n#################################################################\n");
 	printf("#   ANNPFE - Artificial Neural Network Prototyping Front-End    #\n");
-	printf("#             Final Built, v0.1 - 01/12/2018                    #\n");
+	printf("#             Final Built, v0.1 - 12/12/2018                    #\n");
 	printf("#                    Authors/Developer:                         #\n");
 	printf("#             Marco Chiarelli        @ UNISALENTO & CMCC        #\n");
 	printf("#               Gabriele Accarino    @ UNISALENTO & CMCC        #\n");
@@ -636,12 +641,15 @@ int main(int argc, char *argv[])
 
 	if(!strcmp(argv[1], "help"))
 	{
-		printf("USAGE: ./annpfe [n_lag] [minibatch_size] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [verbose] [metrics] [n_h_layers] [n_h_neurons] [max_epoch] [timesteps] [learning_rate] [dropout] [activation_f] [break_train_score] [break_val_score] [training_idx[\%%]] [validation_idx[\%%]] [want_layer_normalization] [n_threads] [random_seed]\n");
+		printf("USAGE: ./annpfe [input_file] [delimiter] [n_lag] [minibatch_size] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [verbose] [metrics] [n_h_layers] [n_h_neurons] [max_epoch] [timesteps] [learning_rate] [dropout] [activation_f] [break_train_score] [break_val_score] [training_idx[\%%]] [validation_idx[\%%]] [want_layer_normalization] [n_threads] [random_seed]\n");
 		printf("Enter executable name without params for testing.\n");	
 		return 2;
 	}
 
-	n_lag = argc > 1 ? atoi(argv[1]) : N_LAG;
+	input_file = argc > 1 ? argv[1] : INPUT_FILE;
+	char * delim = argc > 2 ? argv[2] : DELIMITER;
+
+	n_lag = argc > 3 ? atoi(argv[3]) : N_LAG;
 
 	if(n_lag < 0 || n_lag > N_SAMPLES)
 	{
@@ -649,7 +657,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 
-	mini_size = argc > 2 ? atoi(argv[2]) : N_MINIBATCH;
+	mini_size = argc > 4 ? atoi(argv[4]) : N_MINIBATCH;
 
 	if(mini_size < 1)
 	{
@@ -657,7 +665,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 
-	stdnorm = argc > 3 ? atoi(argv[3]) : STDNORM;
+	stdnorm = argc > 5 ? atoi(argv[5]) : STDNORM;
 
 	if(stdnorm < 0 || stdnorm > 3)
 	{
@@ -667,7 +675,7 @@ int main(int argc, char *argv[])
 
 	// test-only parameters
 
-	t_method = argc > 4 ? atoi(argv[4]): TESTING_METHOD;
+	t_method = argc > 6 ? atoi(argv[6]): TESTING_METHOD;
 
 	if(t_method != 0 && t_method != 1)
 	{
@@ -675,15 +683,15 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;
 	}
 
-	if(argc > 5)
-		fn_in = argv[5];
+	if(argc > 7)
+		fn_in = argv[7];
 
-	if(argc > 6)
-		p_name = argv[6];
+	if(argc > 8)
+		p_name = argv[8];
 
 
-	feature_scaling_min = argc > 7 ? atof(argv[7]) : FEATURE_SCALING_MIN;
-	feature_scaling_max = argc > 8 ? atof(argv[8]) : FEATURE_SCALING_MAX;
+	feature_scaling_min = argc > 9 ? atof(argv[9]) : FEATURE_SCALING_MIN;
+	feature_scaling_max = argc > 10 ? atof(argv[10]) : FEATURE_SCALING_MAX;
 
 	if(feature_scaling_max < feature_scaling_min)
 	{
@@ -691,7 +699,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;
 	}
 
-	net_type = argc > 9 ? atoi(argv[9]) : NET_TYPE;	
+	net_type = argc > 11 ? atoi(argv[11]) : NET_TYPE;	
 
 	if(net_type < -1 || net_type > COMMON_LAYERS-1)
 	{
@@ -699,7 +707,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 	
-	verbose = argc > 10 ? atoi(argv[10]) : VERBOSE;
+	verbose = argc > 12 ? atoi(argv[12]) : VERBOSE;
 	
 	if(verbose != 0 && verbose != 1)
 	{
@@ -707,7 +715,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;
 	}
 
-	metrics = argc > 11 ? atoi(argv[11]) : METRICS;
+	metrics = argc > 13 ? atoi(argv[13]) : METRICS;
 
 	if(metrics != 0 && metrics != 1)
 	{
@@ -720,7 +728,7 @@ int main(int argc, char *argv[])
 	if(to_apply)
 	{
 
-		n_h_layers = atoi(argv[12]);	
+		n_h_layers = atoi(argv[14]);	
 
 		if(n_h_layers <= 0)
 		{
@@ -728,7 +736,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		n_h_neurons = argc > 13 ? atoi(argv[13]) : N_NEURONS;
+		n_h_neurons = argc > 15 ? atoi(argv[15]) : N_NEURONS;
 
 		if(n_h_neurons <= 0)
 		{
@@ -736,7 +744,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		max_epoch = argc > 14 ? atoi(argv[14]) : N_EPOCHS;
+		max_epoch = argc > 16 ? atoi(argv[16]) : N_EPOCHS;
 
 		if(max_epoch <= 0)
 		{
@@ -744,7 +752,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 		
-		timesteps = argc > 15 ? atoi(argv[15]) : N_TIMESTEPS;
+		timesteps = argc > 17 ? atoi(argv[17]) : N_TIMESTEPS;
 
 		if(timesteps <= 0)
 		{
@@ -752,7 +760,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		lr = argc > 16 ? ((float) atof(argv[16])) : LEARNING_RATE;
+		lr = argc > 18 ? ((float) atof(argv[18])) : LEARNING_RATE;
 
 		if(lr <= 0 || lr >= 1.00f)
 		{
@@ -760,7 +768,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		dropout = argc > 17 ? ((float) atof(argv[17])) : DROPOUT;
+		dropout = argc > 19 ? ((float) atof(argv[19])) : DROPOUT;
 
 		if(dropout < 0 || dropout >= 1.00f)
 		{
@@ -768,7 +776,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		activation = argc > 18 ? atoi(argv[18]) : ACTIVATION_FUNCTION;
+		activation = argc > 20 ? atoi(argv[20]) : ACTIVATION_FUNCTION;
 
 		if(activation < 0 || activation > ACTIVATION_FUNCTIONS-1)
 		{
@@ -776,7 +784,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		break_train_score = argc > 19 ? ((float) atof(argv[19])) : BREAK_TRAIN_SCORE;
+		break_train_score = argc > 21 ? ((float) atof(argv[21])) : BREAK_TRAIN_SCORE;
 
 		if(break_train_score < 0)
 		{
@@ -784,7 +792,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		break_val_score = argc > 20 ? ((float) atof(argv[20])) : BREAK_VAL_SCORE;
+		break_val_score = argc > 22 ? ((float) atof(argv[22])) : BREAK_VAL_SCORE;
 
 		if(break_val_score < 0)
 		{
@@ -792,7 +800,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		t_idx = argc > 21 ? ((float)atof(argv[21])*0.01f) : TRAINING_IDX;
+		t_idx = argc > 23 ? ((float)atof(argv[23])*0.01f) : TRAINING_IDX;
 
 		if(t_idx <= 0 || t_idx > 1.00f)
 		{
@@ -800,7 +808,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		val_idx = argc > 22 ? ((float)atof(argv[22])*0.01f) : VALIDATION_IDX;
+		val_idx = argc > 24 ? ((float)atof(argv[24])*0.01f) : VALIDATION_IDX;
 
 		if(val_idx < 0 || val_idx >= 1.00f)
 		{
@@ -814,7 +822,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;
 		}
 
-		l_norm = argc > 23 ? atoi(argv[23]) : L_NORM;
+		l_norm = argc > 25 ? atoi(argv[25]) : L_NORM;
 
 		if(l_norm != 0 && l_norm != 1)
 		{
@@ -822,7 +830,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;
 		}
 
-		n_threads = argc > 24 ? atoi(argv[24]) : N_THREADS;
+		n_threads = argc > 26 ? atoi(argv[26]) : N_THREADS;
 
 		if(n_threads <= 0)
 		{
@@ -830,7 +838,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		seed = argc > 25 ? atoi(argv[25]) : RANDOM_SEED;
+		seed = argc > 27 ? atoi(argv[27]) : RANDOM_SEED;
 	}
 
 	(void) signal(SIGINT, sigexit);
@@ -842,6 +850,7 @@ int main(int argc, char *argv[])
 	atyp * output_feature_d = NULL;
 	atyp * train_data = NULL;
 
+	const unsigned char dynamic_dataset = access( input_file, F_OK ) != -1;
 	const int tot_features_lag = TOT_FEATURES+n_lag;
 	const int dataset_size = DATASET_SIZE+n_lag*N_SAMPLES-tot_features_lag*n_lag;
 
@@ -853,7 +862,13 @@ int main(int argc, char *argv[])
 		printf("#################################################################\n");
 		printf("#                       HYPERPARAMETERS                         #\n");
 		printf("#################################################################\n");
-		printf("-----------------------------------------------------------------\n"); 
+		printf("-----------------------------------------------------------------\n");
+		if( dynamic_dataset )
+		{
+			
+			printf("Input file                     = %s ;                            \n", input_file);
+			printf("Delimiter                      = %c ;                            \n", delim[0]);
+		}
 		printf("Number of Lag = %d                                               \n", n_lag);
 		printf("Minibatch size                 = %d;                             \n", mini_size);
 		printf("Normal/Standard-ization method = %d;                             \n", stdnorm);
@@ -884,6 +899,7 @@ int main(int argc, char *argv[])
 		printf("-----------------------------------------------------------------\n\n");
 	}
 
+	printf("Press a KEY to %s\n", to_apply ? "TRAIN":"TEST");
 	(void) getchar();
 
 	kad_node_t * (* const activations_functions[ACTIVATION_FUNCTIONS])(kad_node_t *) =
@@ -910,6 +926,27 @@ int main(int argc, char *argv[])
 
 	kad_node_t * (* activation_function)(kad_node_t *) = activations_functions[activation];
 	kad_node_t * (* network_layer)(kad_node_t *in, int n1, int rnn_flag);
+
+	char * input_item = NULL;
+	char input_line[LINE_MAX_LEN];
+
+	j=-1;
+
+	if( dynamic_dataset )
+	{
+		if(!(fp=fopen(input_file, "r+")))
+		{
+			fprintf(ERROR_DESC, "Unable to read %s.\n", input_file);
+			// return ERROR_FILE;
+		}
+		else
+		{
+			memset(train_data_base, 0, (N_DIM_IN+N_DIM_OUT)*N_SAMPLES*sizeof(atyp));
+			for(i=0 ; fgets(input_line, sizeof(input_line), fp); ++i)
+				for( input_item = strtok(input_line, delim); input_item; input_item = strtok(NULL, delim))
+					train_data_base[++j] = atof(input_item);
+		}
+	}
 			
 	if(n_lag)
 	{
