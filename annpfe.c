@@ -90,7 +90,7 @@
 #define INPUT_FILE "none"
 #define DELIMITER ","
 
-#define LINE_MAX_LEN 2048
+#define LINE_MAX_LEN 250000
 
 #include DATASET
 
@@ -870,8 +870,7 @@ int main(int argc, char *argv[])
 		printf("#################################################################\n");
 		printf("-----------------------------------------------------------------\n");
 		if( dynamic_dataset )
-		{
-			
+		{	
 			printf("Input file                     = \"%s\" ;                            \n", input_file);
 			printf("Delimiter                      = %c ;                            \n", delim[0]);
 		}
