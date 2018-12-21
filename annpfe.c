@@ -612,7 +612,7 @@ int main(int argc, char *argv[])
 	FILE * fp;	
 	int i, j;
 	ann_layers net_type;
-	ann_acfuncs activation;
+	ann_acfuncs activation = ANN_NONE;
 	int exit_code;
 	kann_t *ann = NULL;
 	double break_train_score, break_val_score;
@@ -862,6 +862,29 @@ int main(int argc, char *argv[])
 
 	atyp output_feature_a[tot_features_lag];
 	atyp output_feature_b[tot_features_lag];
+
+	const char * activation_names[ACTIVATION_FUNCTIONS] =
+	{
+		"None",
+		"Square",
+		"Sigmoid",
+		"Tanh",	
+		"ReLU",
+		"Softmax",
+		"1Minus",
+		"Exponential",
+		"Logarithm",
+		"Sin"
+	};
+
+	const char * layer_names[COMMON_LAYERS+1] =
+	{
+		"Resume",
+		"Feed-forward",
+		"RNN",
+		"GRU",	
+		"LSTM"
+	};
 	
 	if(verbose)
 	{
@@ -874,7 +897,7 @@ int main(int argc, char *argv[])
 			printf("Input file                     = \"%s\" ;                            \n", input_file);
 			printf("Delimiter                      = %c ;                            \n", delim[0]);
 		}
-		printf("Number of Lag = %d                                               \n", n_lag);
+		printf("Number of Lag                  = %d                                               \n", n_lag);
 		printf("Minibatch size                 = %d;                             \n", mini_size);
 		printf("Normal/Standard-ization method = %d;                             \n", stdnorm);
 		printf("Testing method                 = %d;                             \n", t_method);
@@ -882,7 +905,7 @@ int main(int argc, char *argv[])
 		printf("Predictions filename           = \"%s\" ;                            \n", p_name);
 		printf("Feature Scaling min            = %g;                             \n", feature_scaling_min);
 		printf("Feature Scaling max            = %g;                             \n", feature_scaling_max);
-		printf("Network type                   = %d;                             \n", net_type);
+		printf("Network layer                  = %s;                             \n", layer_names[net_type+1]);
 		printf("Verbose                        = %d;                             \n", verbose);
 		printf("Metrics                        = %d;                             \n", metrics);
 		if(to_apply)
@@ -893,6 +916,7 @@ int main(int argc, char *argv[])
 			printf("Timesteps                      = %d;                             \n", timesteps);
 			printf("Learning rate                  = %g;                             \n", lr);
 			printf("Dropout                        = %g;                             \n", dropout);
+			printf("Activation function            = %s;                             \n", activation_names[activation]);
 			printf("Break-train-score              = %g;                             \n", break_train_score);
 			printf("Break-val-score                = %g;                             \n", break_val_score);
 			printf("Training index                 = %g;                             \n", t_idx);
