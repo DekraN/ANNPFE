@@ -1,7 +1,7 @@
 /*
 #################################################################
 #   ANNPFE - Artificial Neural Network Prototyping Front-End    #
-#             Final Built, v0.1 - 12/12/2018                    #
+#             Final Built, v0.1 - 23/12/2018                    #
 #                    Authors/Developer:                         #
 #             Marco Chiarelli        @ UNISALENTO & CMCC        #
 #               Gabriele Accarino    @ UNISALENTO & CMCC        #
@@ -12,6 +12,7 @@
 #################################################################
 */
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -21,76 +22,76 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include "inter_h.h"
-#include "kann_atyp/kann.h"
+#include 					"inter_h.h"
+#include 					"kann_atyp/kann.h"
+
+enum
+{
+	false,
+	true
+};
+
+typedef unsigned char bool;
 
 #ifndef DATASET
-	#define DATASET "test_dataset.h"
+	#define DATASET    		 "test_dataset.h"
 #endif
 
 #ifndef N_SAMPLES
-	#define N_SAMPLES 50000
+	#define N_SAMPLES  		 50000
 #endif
 
 #ifndef N_FEATURES
-	#define N_FEATURES 12
+	#define N_FEATURES 		 12
 #endif
 
 #ifndef N_DIM_OUT
-	#define N_DIM_OUT 1
+	#define N_DIM_OUT  		 1
 #endif
 
-#ifndef TRAINING_LOSS_FILE
-	#define TRAINING_LOSS_FILE "training_loss.csv"
-#endif
-
-#ifndef VALIDATION_LOSS_FILE
-	#define VALIDATION_LOSS_FILE "validation_loss.csv"
-#endif
-
-#ifndef ERROR_SCORE_FILE
-	#define ERROR_SCORE_FILE "error_score.csv"
-#endif
-
-#define NET_TYPE 0
-#define N_H_LAYERS 3
-#define N_NEURONS 120
-#define N_EPOCHS 3000
-#define LEARNING_RATE 0.001f
-#define DROPOUT 0.00f // 0.20f
-#define ACTIVATION_FUNCTION 1
+#define RUN_NEURAL			 true
+#define N_H_LAYERS 			 3
+#define N_NEURONS 			 120
+#define N_EPOCHS 			 3000
+#define LEARNING_RATE 		 0.001f
+#define DROPOUT 			 0.00f // 0.20f
 #define ACTIVATION_FUNCTIONS 10
-#define COMMON_LAYERS 4
-#define BREAK_TRAIN_SCORE 0.00f
-#define BREAK_VAL_SCORE 0.00f
-#define N_DIM_IN N_FEATURES
-#define N_TIMESTEPS 1
-#define N_MINIBATCH 1 // ONLINE LEARNING
-#define STDNORM 1
-#define L_NORM 1
-#define N_THREADS 8
-#define RANDOM_SEED 11 // (time(NULL))
-#define TRAINING_IDX 0.7f
-#define VALIDATION_IDX 0.1f
-#define TESTING_METHOD 1
-#define N_LAG 0
-#define VERBOSE 1
-#define METRICS 1
-#define TOT_FEATURES (N_DIM_OUT+N_DIM_IN)
-#define DATASET_SIZE TOT_FEATURES*N_SAMPLES
+#define COMMON_LAYERS 	  	 4
+#define BREAK_TRAIN_SCORE 	 0.00f
+#define BREAK_VAL_SCORE   	 0.00f
+#define N_DIM_IN 	   		 N_FEATURES
+#define N_TIMESTEPS    		 1
+#define N_MINIBATCH    		 1 // ONLINE LEARNING
+#define STDNORM 	   		 1
+#define L_NORM 		  		 true
+#define N_THREADS      		 8  
+#define RANDOM_SEED    		 11 // (time(NULL))
+#define TRAINING_IDX   		 0.70f
+#define VALIDATION_IDX 		 0.10f
+#define TESTING_METHOD 		 true
+#define N_LAG 		   		 0
+#define VERBOSE		   		 true
+#define METRICS 	   		 true
+#define TOT_FEATURES  		 (N_DIM_OUT+N_DIM_IN)
+#define DATASET_SIZE  		 TOT_FEATURES*N_SAMPLES
 
-#define FEATURE_SCALING_MIN 0.00f
-#define FEATURE_SCALING_MAX 1.00f
+#define FEATURE_SCALING_MIN  0.00f
+#define FEATURE_SCALING_MAX  1.00f
 
-#define TO_APPLY 1
-#define TRAINING_DESC stderr
-#define ERROR_DESC stderr
-#define NET_BINARY_NAME "kann_net.bin"
-#define PREDICTIONS_NAME "predictions.csv"
-#define INPUT_FILE "none"
-#define DELIMITER ","
+#define TO_APPLY 		  	 true
+#define TRAINING_DESC 	 	 stderr
+#define ERROR_DESC 		  	 stderr
+#define NET_BINARY_NAME  	 "kann_net.bin"
+#define PREDICTIONS_NAME 	 "predictions.csv"
+#define INPUT_FILE 		 	 "none.csv"
+#define DELIMITER 		 	 ","
+#define TRAP_FP_EXCEPTIONS   true
+#define NEW_DATASET 		 "new_dataset.csv"
+#define TRAINING_LOSS_FILE 	 "training_loss.csv"
+#define VALIDATION_LOSS_FILE "validation_loss.csv"
+#define ERROR_SCORE_FILE 	 "error_score.csv"
 
-#define LINE_MAX_LEN 250000
+#define LINE_MAX_LEN 		 250000
 
 #include DATASET
 
@@ -125,9 +126,21 @@ typedef enum
 	ANN_LOG,
 	ANN_SIN
 } ann_acfuncs;
-	
 
-static unsigned char train_exec = 1;
+typedef enum
+{
+	ANN_NOTRANS,
+	ANN_COPY,
+	ANN_LAG,
+	ANN_PREPROC,
+	ANN_LAGANDPREPROC
+} ann_trans;
+
+#define NET_TYPE 		    ANN_FF
+#define ACTIVATION_FUNCTION ANN_SIGM
+#define TRANSFORMATION 	    ANN_NOTRANS	
+
+static bool train_exec = true;
 
 static atyp MIN(atyp a[], int n, int pitch, int max_pitch)
 {
@@ -245,7 +258,7 @@ static inline kad_node_t * kad_identity(kad_node_t *x)
 	return x;
 }
 
-static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ulen, int mbs, int max_epoch, double break_train_score, double break_val_score, float train_idx, float val_idx, int n_threads, unsigned char verbose, unsigned char metrics)
+static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ulen, int mbs, int max_epoch, double break_train_score, double break_val_score, float train_idx, float val_idx, int n_threads, bool verbose, bool metrics, const char * t_loss_file, const char * v_loss_file)
 {
 	int k;
 	kann_t *ua;
@@ -255,8 +268,6 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 	int n_var = kann_size_var(net); 
 	int n_dim_in = kann_dim_in(net);
 	int n_dim_out = kann_dim_out(net);
-	static double memory_val = 0.00f;
-	static unsigned char memory_val_cnt = 0;
 
 	int n_train_ex = (int)(train_idx*n_samples);	
 	int n_val_ex = (int)(val_idx*n_samples);
@@ -314,7 +325,7 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 
 	if(metrics)
 	{
-		if(!(train_fd = fopen(TRAINING_LOSS_FILE, "w+")))
+		if(!(train_fd = fopen(t_loss_file, "w+")))
 		{
 			for (k = 0; k < ulen; ++k)
 			{
@@ -323,11 +334,11 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 			}
 	
 			free(x), free(y), free(r);		
-			fprintf(ERROR_DESC, "Unable to write on "TRAINING_LOSS_FILE".\n");
+			fprintf(ERROR_DESC, "Unable to write on \"%s\".\n", t_loss_file);
 			return ERROR_FILE;
 		}			
 
-		if(val_idx && !(val_fd = fopen(VALIDATION_LOSS_FILE, "w+")))
+		if(val_idx && !(val_fd = fopen(v_loss_file, "w+")))
 		{
 			for (k = 0; k < ulen; ++k)
 			{
@@ -337,7 +348,7 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 	
 			fclose(train_fd);
 			free(x), free(y), free(r);	
-			fprintf(ERROR_DESC, "Unable to write on "VALIDATION_LOSS_FILE".\n");
+			fprintf(ERROR_DESC, "Unable to write on \"%s\".\n", v_loss_file);
 			return ERROR_FILE;
 		}
 	}
@@ -472,7 +483,7 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 	return NOERROR;
 }
 
-static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, atyp *min_x, atyp *max_x, atyp *mean, atyp *std, char * p_name, int mbs, unsigned char net_type, unsigned char stdnorm, unsigned char metrics, atyp a, atyp b)
+static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, atyp *min_x, atyp *max_x, atyp *mean, atyp *std, char * p_name, int mbs, unsigned char net_type, unsigned char stdnorm, bool metrics, atyp a, atyp b, const char * e_score_file)
 {
 	int i, j, bs, k, l;
 	struct timeval tp;
@@ -523,15 +534,15 @@ static int test(kann_t *net, atyp *test_data, int n_test_ex, double *tot_cost, a
 	if(!(fp=fopen(p_name, "w+")))
 	{
 		free(x1), free(expected);
-		fprintf(ERROR_DESC, "Unable to write on %s.\n", p_name);
+		fprintf(ERROR_DESC, "Unable to write on \"%s\".\n", p_name);
 		return ERROR_FILE;
 	}
 
-	if(metrics && !(err_fd = fopen(ERROR_SCORE_FILE, "w+")))
+	if(metrics && !(err_fd = fopen(e_score_file, "w+")))
 	{
 		fclose(fp);
 		free(x1), free(expected);
-		fprintf(ERROR_DESC, "Unable to write on "ERROR_SCORE_FILE".\n");
+		fprintf(ERROR_DESC, "Unable to write on \"%s\".\n", e_score_file);
 		return ERROR_FILE;
 	}
 
@@ -613,17 +624,31 @@ int main(int argc, char *argv[])
 	int i, j;
 	ann_layers net_type;
 	ann_acfuncs activation = ANN_NONE;
+	ann_trans transformation = ANN_NOTRANS;
 	int exit_code;
 	kann_t *ann = NULL;
 	double break_train_score, break_val_score;
-	char *input_file = INPUT_FILE;
-	char *p_name = PREDICTIONS_NAME;
-	char *fn_in = NET_BINARY_NAME, *fn_out = 0;
+	char *fn_in, *input_file, *new_dataset, *p_name;
+	char *t_loss_file, *v_loss_file, *e_score_file;
 	float lr, dropout, t_idx, val_idx;
 	atyp feature_scaling_min, feature_scaling_max;
-	const unsigned char to_apply = argc > 14;
+	const bool to_apply = argc > 21;
 	
-	int verbose, metrics, n_h_layers, n_h_neurons, mini_size, timesteps, max_epoch, t_method, n_lag, stdnorm, l_norm, n_threads, seed;
+	int run_neural,
+		trap_fp_ex,
+		verbose,
+		metrics,
+		n_h_layers,
+		n_h_neurons,
+		mini_size, 
+		timesteps,
+		max_epoch,
+		t_method,
+		n_lag,
+		stdnorm,
+		l_norm,
+		n_threads,
+		seed;
 
 	printf("\n\n#################################################################\n");
 	printf("#   ANNPFE - Artificial Neural Network Prototyping Front-End    #\n");
@@ -641,13 +666,21 @@ int main(int argc, char *argv[])
 
 	if(!strcmp(argv[1], "help"))
 	{
-		printf("USAGE: ./annpfe [input_file] [delimiter] [n_lag] [minibatch_size] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [verbose] [metrics] [n_h_layers] [n_h_neurons] [max_epoch] [timesteps] [learning_rate] [dropout] [activation_f] [break_train_score] [break_val_score] [training_idx[\%%]] [validation_idx[\%%]] [want_layer_normalization] [n_threads] [random_seed]\n");
+		printf("USAGE: ./annpfe [run_neural] [input_file] [delimiter] [new_dataset] [transformation] [trap_fp_exceptions] [t_loss_file] [v_loss_file] [e_score_file] [n_lag] [minibatch_size] [normal-standard-ization_method] [testing_method] [network_filename] [predictions_filename] [feature_scaling_min] [feature_scaling_max] [net_type] [verbose] [metrics] [n_h_layers] [n_h_neurons] [max_epoch] [timesteps] [learning_rate] [dropout] [activation_f] [break_train_score] [break_val_score] [training_idx[\%%]] [validation_idx[\%%]] [want_layer_normalization] [n_threads] [random_seed]\n");
 		printf("Enter executable name without params for testing.\n");	
 		return 2;
 	}
+	
+	run_neural = argc > 1 ? atoi(argv[1]): RUN_NEURAL;
 
-	input_file = argc > 1 ? argv[1] : INPUT_FILE;
-	char * delim = argc > 2 ? argv[2] : DELIMITER;
+	if(run_neural != false && run_neural != true)
+	{
+		fprintf(ERROR_DESC, "Run Neural must be a boolean number.\n");
+		return ERROR_SYNTAX;
+	}
+
+	input_file = argc > 2 ? argv[2] : INPUT_FILE;
+	char * delim = argc > 3 ? argv[3] : DELIMITER;
 
 	if(strlen(delim) > 1)
 	{
@@ -655,15 +688,37 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;
 	}
 
-	n_lag = argc > 3 ? atoi(argv[3]) : N_LAG;
+	new_dataset = argc > 4 ? argv[4] : NEW_DATASET;
 
-	if(n_lag < 0 || n_lag > N_SAMPLES)
+	transformation = argc > 5 ? atoi(argv[5]) : TRANSFORMATION;
+
+	if(transformation < 0 || transformation > ANN_LAGANDPREPROC)
 	{
-		fprintf(ERROR_DESC, "Number of lag must be a positive integer.\n");
+		fprintf(ERROR_DESC, "Transformation must be an integer >= 0 and <= %d.\n", ANN_LAGANDPREPROC);
 		return ERROR_SYNTAX;	
 	}
 
-	mini_size = argc > 4 ? atoi(argv[4]) : N_MINIBATCH;
+	trap_fp_ex = argc > 6 ? atoi(argv[6]): TRAP_FP_EXCEPTIONS;
+
+	if(trap_fp_ex != false && trap_fp_ex != true)
+	{
+		fprintf(ERROR_DESC, "Trap FP exceptions must be a boolean number.\n");
+		return ERROR_SYNTAX;
+	}
+
+	t_loss_file = argc > 7 ? argv[7] : TRAINING_LOSS_FILE;
+	v_loss_file = argc > 8 ? argv[8] : VALIDATION_LOSS_FILE;
+	e_score_file = argc > 9 ? argv[9] : ERROR_SCORE_FILE;
+	
+	n_lag = argc > 10 ? atoi(argv[10]) : N_LAG;
+
+	if(n_lag < 0 || n_lag > N_SAMPLES)
+	{
+		fprintf(ERROR_DESC, "Number of lag must be an integer >= 0 and <= %d.\n", N_SAMPLES);
+		return ERROR_SYNTAX;	
+	}
+
+	mini_size = argc > 11 ? atoi(argv[11]) : N_MINIBATCH;
 
 	if(mini_size < 1)
 	{
@@ -671,7 +726,7 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 
-	stdnorm = argc > 5 ? atoi(argv[5]) : STDNORM;
+	stdnorm = argc > 12 ? atoi(argv[12]) : STDNORM;
 
 	if(stdnorm < 0 || stdnorm > 3)
 	{
@@ -681,31 +736,27 @@ int main(int argc, char *argv[])
 
 	// test-only parameters
 
-	t_method = argc > 6 ? atoi(argv[6]): TESTING_METHOD;
+	t_method = argc > 13 ? atoi(argv[13]): TESTING_METHOD;
 
-	if(t_method != 0 && t_method != 1)
+	if(t_method != false && t_method != true)
 	{
 		fprintf(ERROR_DESC, "Testing method must be a boolean number.\n");
 		return ERROR_SYNTAX;
 	}
 
-	if(argc > 7)
-		fn_in = argv[7];
+	fn_in = argc > 14 ? argv[14] : NET_BINARY_NAME;
+	p_name = argc > 15 ? argv[15] : PREDICTIONS_NAME;
 
-	if(argc > 8)
-		p_name = argv[8];
-
-
-	feature_scaling_min = argc > 9 ? atof(argv[9]) : FEATURE_SCALING_MIN;
-	feature_scaling_max = argc > 10 ? atof(argv[10]) : FEATURE_SCALING_MAX;
+	feature_scaling_min = argc > 16 ? atof(argv[16]) : FEATURE_SCALING_MIN;
+	feature_scaling_max = argc > 17 ? atof(argv[17]) : FEATURE_SCALING_MAX;
 
 	if(feature_scaling_max < feature_scaling_min)
 	{
-		fprintf(ERROR_DESC, "Feature-scaling min must be lesser than feature-scaling max.");	
+		fprintf(ERROR_DESC, "Feature-scaling min must be less than feature-scaling max: %g.", feature_scaling_max);	
 		return ERROR_SYNTAX;
 	}
 
-	net_type = argc > 11 ? atoi(argv[11]) : NET_TYPE;	
+	net_type = argc > 18 ? atoi(argv[18]) : NET_TYPE;	
 
 	if(net_type < -1 || net_type > COMMON_LAYERS-1)
 	{
@@ -713,17 +764,17 @@ int main(int argc, char *argv[])
 		return ERROR_SYNTAX;	
 	}
 	
-	verbose = argc > 12 ? atoi(argv[12]) : VERBOSE;
+	verbose = argc > 19 ? atoi(argv[19]) : VERBOSE;
 	
-	if(verbose != 0 && verbose != 1)
+	if(verbose != false && verbose != true)
 	{
 		fprintf(ERROR_DESC, "verbose must be a boolean number.\n");
 		return ERROR_SYNTAX;
 	}
 
-	metrics = argc > 13 ? atoi(argv[13]) : METRICS;
+	metrics = argc > 20 ? atoi(argv[20]) : METRICS;
 
-	if(metrics != 0 && metrics != 1)
+	if(metrics != false && metrics != true)
 	{
 		fprintf(ERROR_DESC, "Error metrics must be a boolean number.\n");
 		return ERROR_SYNTAX;
@@ -734,7 +785,7 @@ int main(int argc, char *argv[])
 	if(to_apply)
 	{
 
-		n_h_layers = atoi(argv[14]);	
+		n_h_layers = atoi(argv[21]);	
 
 		if(n_h_layers <= 0)
 		{
@@ -742,7 +793,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		n_h_neurons = argc > 15 ? atoi(argv[15]) : N_NEURONS;
+		n_h_neurons = argc > 22 ? atoi(argv[22]) : N_NEURONS;
 
 		if(n_h_neurons <= 0)
 		{
@@ -750,7 +801,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		max_epoch = argc > 16 ? atoi(argv[16]) : N_EPOCHS;
+		max_epoch = argc > 23 ? atoi(argv[23]) : N_EPOCHS;
 
 		if(max_epoch <= 0)
 		{
@@ -758,7 +809,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 		
-		timesteps = argc > 17 ? atoi(argv[17]) : N_TIMESTEPS;
+		timesteps = argc > 24 ? atoi(argv[24]) : N_TIMESTEPS;
 
 		if(timesteps <= 0)
 		{
@@ -766,7 +817,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		lr = argc > 18 ? ((float) atof(argv[18])) : LEARNING_RATE;
+		lr = argc > 25 ? ((float) atof(argv[25])) : LEARNING_RATE;
 
 		if(lr <= 0 || lr >= 1.00f)
 		{
@@ -774,7 +825,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		dropout = argc > 19 ? ((float) atof(argv[19])) : DROPOUT;
+		dropout = argc > 26 ? ((float) atof(argv[26])) : DROPOUT;
 
 		if(dropout < 0 || dropout >= 1.00f)
 		{
@@ -782,7 +833,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		activation = argc > 20 ? atoi(argv[20]) : ACTIVATION_FUNCTION;
+		activation = argc > 27 ? atoi(argv[27]) : ACTIVATION_FUNCTION;
 
 		if(activation < 0 || activation > ACTIVATION_FUNCTIONS-1)
 		{
@@ -790,7 +841,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		break_train_score = argc > 21 ? ((float) atof(argv[21])) : BREAK_TRAIN_SCORE;
+		break_train_score = argc > 28 ? ((float) atof(argv[28])) : BREAK_TRAIN_SCORE;
 
 		if(break_train_score < 0)
 		{
@@ -798,7 +849,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		break_val_score = argc > 22 ? ((float) atof(argv[22])) : BREAK_VAL_SCORE;
+		break_val_score = argc > 29 ? ((float) atof(argv[29])) : BREAK_VAL_SCORE;
 
 		if(break_val_score < 0)
 		{
@@ -806,7 +857,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		t_idx = argc > 23 ? ((float)atof(argv[23])*0.01f) : TRAINING_IDX;
+		t_idx = argc > 30 ? ((float)atof(argv[30])*0.01f) : TRAINING_IDX;
 
 		if(t_idx <= 0 || t_idx > 1.00f)
 		{
@@ -814,7 +865,7 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		val_idx = argc > 24 ? ((float)atof(argv[24])*0.01f) : VALIDATION_IDX;
+		val_idx = argc > 31 ? ((float)atof(argv[31])*0.01f) : VALIDATION_IDX;
 
 		if(val_idx < 0 || val_idx >= 1.00f)
 		{
@@ -828,15 +879,15 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;
 		}
 
-		l_norm = argc > 25 ? atoi(argv[25]) : L_NORM;
+		l_norm = argc > 32 ? atoi(argv[32]) : L_NORM;
 
-		if(l_norm != 0 && l_norm != 1)
+		if(l_norm != false && l_norm != true)
 		{
 			fprintf(ERROR_DESC, "Layer normalization must be a boolean number.\n");
 			return ERROR_SYNTAX;
 		}
 
-		n_threads = argc > 26 ? atoi(argv[26]) : N_THREADS;
+		n_threads = argc > 33 ? atoi(argv[33]) : N_THREADS;
 
 		if(n_threads <= 0)
 		{
@@ -844,19 +895,22 @@ int main(int argc, char *argv[])
 			return ERROR_SYNTAX;	
 		}
 
-		seed = argc > 27 ? atoi(argv[27]) : RANDOM_SEED;
+		seed = argc > 34 ? atoi(argv[34]) : RANDOM_SEED;
 	}
 
 	(void) signal(SIGINT, sigexit);
 
-	kad_trap_fe();
+	if(trap_fp_ex)
+		kad_trap_fe();
+
 	kann_srand(seed);
 
 	atyp * output_feature_c = NULL;
 	atyp * output_feature_d = NULL;
 	atyp * train_data = NULL;
 
-	const unsigned char dynamic_dataset = access( input_file, F_OK ) != -1;
+	const bool dynamic_dataset = access( input_file, F_OK ) != -1;
+	const int samples_lag = N_SAMPLES-n_lag;
 	const int tot_features_lag = TOT_FEATURES+n_lag;
 	const int dataset_size = DATASET_SIZE+n_lag*N_SAMPLES-tot_features_lag*n_lag;
 
@@ -885,6 +939,14 @@ int main(int argc, char *argv[])
 		"GRU",	
 		"LSTM"
 	};
+
+	const char * bool_names[2] = 
+	{
+		"NO",
+		"YES"
+	};
+
+	#define to_bool(x) bool_names[x]
 	
 	if(verbose)
 	{
@@ -892,22 +954,31 @@ int main(int argc, char *argv[])
 		printf("#                       HYPERPARAMETERS                         #\n");
 		printf("#################################################################\n");
 		printf("-----------------------------------------------------------------\n");
+
+		printf("Run Neural                     = %s;                             \n", to_bool(run_neural));
+
 		if( dynamic_dataset )
-		{	
 			printf("Input file                     = \"%s\" ;                            \n", input_file);
-			printf("Delimiter                      = %c ;                            \n", delim[0]);
-		}
-		printf("Number of Lag                  = %d                                               \n", n_lag);
+
+		printf("Delimiter                      = %c ;                            \n", delim[0]);
+		printf("New Dataset                    = \"%s\" ;                            \n", new_dataset);
+		printf("Transformation                 = %d;                             \n", transformation);
+		printf("Trap FP Exceptions             = %s;                              \n", to_bool(trap_fp_ex));
+		printf("Training Loss file             = \"%s\" ;                            \n", t_loss_file);
+		printf("Validation Loss file           = \"%s\" ;                            \n", v_loss_file);
+		printf("Error Score file               = \"%s\" ;                            \n", e_score_file);
+		printf("Number of Lag                  = %d                              \n", n_lag);
 		printf("Minibatch size                 = %d;                             \n", mini_size);
 		printf("Normal/Standard-ization method = %d;                             \n", stdnorm);
-		printf("Testing method                 = %d;                             \n", t_method);
+		printf("Testing method                 = %s;                             \n", to_bool(t_method));
 		printf("Network filename               = \"%s\" ;                            \n", fn_in);
 		printf("Predictions filename           = \"%s\" ;                            \n", p_name);
 		printf("Feature Scaling min            = %g;                             \n", feature_scaling_min);
 		printf("Feature Scaling max            = %g;                             \n", feature_scaling_max);
 		printf("Network layer                  = %s;                             \n", layer_names[net_type+1]);
-		printf("Verbose                        = %d;                             \n", verbose);
-		printf("Metrics                        = %d;                             \n", metrics);
+		printf("Verbose                        = %s;                             \n", to_bool(verbose));
+		printf("Metrics                        = %s;                             \n", to_bool(metrics));
+
 		if(to_apply)
 		{
 			printf("Number of layers               = %d;                             \n", n_h_layers);
@@ -921,12 +992,15 @@ int main(int argc, char *argv[])
 			printf("Break-val-score                = %g;                             \n", break_val_score);
 			printf("Training index                 = %g;                             \n", t_idx);
 			printf("Validation index               = %g;                             \n", val_idx);
-			printf("Layer normalization            = %d;                             \n", l_norm);
+			printf("Layer normalization            = %s;                             \n", to_bool(l_norm));
 			printf("Number of threads              = %d;                             \n", n_threads);
 			printf("Random seed                    = %d;                             \n", seed);
 		}
+
 		printf("-----------------------------------------------------------------\n\n");
 	}
+
+	#undef to_bool
 
 	printf("Press a KEY to %s\n", to_apply ? "TRAIN":"TEST");
 	(void) getchar();
@@ -970,11 +1044,40 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
-			memset(train_data_base, 0, (N_DIM_IN+N_DIM_OUT)*N_SAMPLES*sizeof(atyp));
+			memset(train_data_base, 0, DATASET_SIZE*sizeof(atyp));
+
 			for(i=0 ; fgets(input_line, sizeof(input_line), fp); ++i)
 				for( input_item = strtok(input_line, delim); input_item; input_item = strtok(NULL, delim))
 					train_data_base[++j] = atof(input_item);
+
+			fclose(fp);
 		}
+	}
+
+	if(transformation == ANN_COPY)
+	{
+		if(!(fp=fopen(new_dataset, "w+")))
+		{
+			fprintf(ERROR_DESC, "Unable to write %s.\n", new_dataset);
+			// return ERROR_FILE;
+		}
+		else
+		{
+			for(i=0; i<N_SAMPLES; ++i)
+			{
+				for(j=0; j<TOT_FEATURES; ++j)
+				{
+					fprintf(fp, "%g", train_data_base[i*TOT_FEATURES + j]);
+					if(j != TOT_FEATURES-1)
+						fprintf(fp, ", ");
+				}
+				if(i != N_SAMPLES-1)
+					fprintf(fp, "\n");
+			}
+
+			fclose(fp);
+		}
+
 	}
 			
 	if(n_lag)
@@ -982,12 +1085,49 @@ int main(int argc, char *argv[])
 		
 		train_data = calloc(dataset_size, sizeof(atyp));	
 
-		for(i=0; i<N_SAMPLES-n_lag; ++i)
+		if(transformation == ANN_LAG || transformation == ANN_LAGANDPREPROC)
 		{
-			for(j=0; j<n_lag+1; ++j)
-				train_data[i*tot_features_lag + j] = train_data_base[(i+n_lag-j)*TOT_FEATURES];
-			for( ; j<tot_features_lag; ++j)
-				train_data[i*tot_features_lag + j] = train_data_base[(i+n_lag)*TOT_FEATURES+j-n_lag];
+			if(!(fp=fopen(new_dataset, "w+")))
+			{
+				fprintf(ERROR_DESC, "Unable to write %s.\n", new_dataset);
+				// return ERROR_FILE;
+			}
+			else
+			{
+				for(i=0; i<samples_lag; ++i)
+				{
+					for(j=0; j<n_lag+1; ++j)
+					{
+						train_data[i*tot_features_lag + j] = train_data_base[(i+n_lag-j)*TOT_FEATURES];
+						fprintf(fp, "%g", train_data[i*tot_features_lag + j]);
+
+						if(j != n_lag)
+							fprintf(fp, ", ");
+					}
+
+					for( ; j<tot_features_lag; ++j)
+					{
+						train_data[i*tot_features_lag + j] = train_data_base[(i+n_lag)*TOT_FEATURES+j-n_lag];
+						fprintf(fp, ", %g", train_data[i*tot_features_lag + j]);
+					}
+
+					fprintf(fp, "\n");
+
+				}
+	
+				fclose(fp);
+			}
+
+		}
+		else
+		{
+			for(i=0; i<samples_lag; ++i)
+			{
+				for(j=0; j<n_lag+1; ++j)
+					train_data[i*tot_features_lag + j] = train_data_base[(i+n_lag-j)*TOT_FEATURES];
+				for( ; j<tot_features_lag; ++j)
+					train_data[i*tot_features_lag + j] = train_data_base[(i+n_lag)*TOT_FEATURES+j-n_lag];
+			}
 		}
 	}
 	else
@@ -1066,55 +1206,85 @@ int main(int argc, char *argv[])
 	
 		printf("-----------------------------------------------------------------\n\n");
 	}
-	
-	if (to_apply)
+
+	if(transformation == ANN_PREPROC || transformation == ANN_LAGANDPREPROC)
 	{
-		if(net_type != ANN_RESUME)
+		if(!(fp=fopen(new_dataset, "w+")))
 		{
-			// model generation
-			kad_node_t *t;
-			int rnn_flag = KANN_RNN_VAR_H0;
-			if (l_norm) rnn_flag |= KANN_RNN_NORM;
-			network_layer = common_layers[net_type]; 
-			t = kann_layer_input(N_DIM_IN+n_lag); // t = kann_layer_input(d->n_in);
-			
-
-			for (i = 0; i < n_h_layers; ++i)
-			{
-				t = activation_function(network_layer(t, n_h_neurons, rnn_flag));
-
-				if(dropout)
-					t = kann_layer_dropout(t, dropout);
-			}
-
-			ann = kann_new(kann_layer_cost(t, N_DIM_OUT, KANN_C_MSE), 0);
+			fprintf(ERROR_DESC, "Unable to write %s.\n", new_dataset);
+			// return ERROR_FILE;
 		}
 		else
-			ann = kann_load(fn_in);
-
-		printf("\nTRAINING...\n");
-		exit_code = train(ann, train_data, N_SAMPLES-n_lag, lr, timesteps, mini_size, max_epoch, break_train_score, break_val_score, t_idx, val_idx, n_threads, verbose, metrics);
-
-		if(!exit_code) 
 		{
-			kann_save(fn_in, ann);
-			printf("\nTraining succeeded!\n");
+			for(i=0; i<samples_lag; ++i)
+			{
+				for(j=0; j<tot_features_lag; ++j)
+				{
+					fprintf(fp, "%g", train_data[i*tot_features_lag + j]);
+					if(j != tot_features_lag-1)
+						fprintf(fp, ", ");
+				}
+				if(i != samples_lag-1)
+					fprintf(fp, "\n");
+			}
+
+			fclose(fp);
 		}
-		
+
 	}
-	else
+	
+	if(run_neural)
 	{
-		double tot_cost = 0.00;
-		ann = kann_load(fn_in);
-		printf("\nTEST...\n");
-		exit_code = t_method ? test(ann, &train_data[(int)(tot_features_lag*(N_SAMPLES-n_lag)*(t_idx+val_idx))], N_SAMPLES - (int)(N_SAMPLES*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, mini_size, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max) : test(ann, train_data, N_SAMPLES-n_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, mini_size, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max);	
+		if (to_apply)
+		{
+			if(net_type != ANN_RESUME)
+			{
+				// model generation
+				kad_node_t *t;
+				int rnn_flag = KANN_RNN_VAR_H0;
+				if (l_norm) rnn_flag |= KANN_RNN_NORM;
+				network_layer = common_layers[net_type]; 
+				t = kann_layer_input(N_DIM_IN+n_lag); // t = kann_layer_input(d->n_in);
+				
 
-		if(!exit_code) 		
-			printf("\nTest total cost: %g\n", tot_cost);
+				for (i = 0; i < n_h_layers; ++i)
+				{
+					t = activation_function(network_layer(t, n_h_neurons, rnn_flag));
+
+					if(dropout)
+						t = kann_layer_dropout(t, dropout);
+				}
+
+				ann = kann_new(kann_layer_cost(t, N_DIM_OUT, KANN_C_MSE), 0);
+			}
+			else
+				ann = kann_load(fn_in);
+
+			printf("\nTRAINING...\n");
+			exit_code = train(ann, train_data, samples_lag, lr, timesteps, mini_size, max_epoch, break_train_score, break_val_score, t_idx, val_idx, n_threads, verbose, metrics, t_loss_file, v_loss_file);
+
+			if(!exit_code) 
+			{
+				kann_save(fn_in, ann);
+				printf("\nTraining succeeded!\n");
+			}
+			
+		}
+		else
+		{
+			double tot_cost = 0.00;
+			ann = kann_load(fn_in);
+			printf("\nTEST...\n");
+			exit_code = t_method ? test(ann, &train_data[(int)(tot_features_lag*samples_lag*(t_idx+val_idx))], N_SAMPLES - (int)(N_SAMPLES*(t_idx+val_idx)), &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, mini_size, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max, e_score_file) : test(ann, train_data, samples_lag, &tot_cost, output_feature_a, output_feature_b, output_feature_c, output_feature_d, p_name, mini_size, net_type, stdnorm, metrics, feature_scaling_min, feature_scaling_max, e_score_file);	
+
+			if(!exit_code) 		
+				printf("\nTest total cost: %g\n", tot_cost);
+		}
+
+		kann_delete(ann);
+		printf("\nDeleted kann network.\n");
 	}
 
-	kann_delete(ann);
-	printf("\nDeleted kann network.\n");
-	printf("\nThank you for using this program!\n");
+	printf("Thank you for using this program!\n");
 	return exit_code;
 }
