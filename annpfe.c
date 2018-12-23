@@ -132,8 +132,7 @@ typedef enum
 	ANN_NOTRANS,
 	ANN_COPY,
 	ANN_LAG,
-	ANN_PREPROC,
-	ANN_LAGANDPREPROC
+	ANN_PREPROC
 } ann_trans;
 
 #define NET_TYPE 		    ANN_FF
@@ -692,9 +691,9 @@ int main(int argc, char *argv[])
 
 	transformation = argc > 5 ? atoi(argv[5]) : TRANSFORMATION;
 
-	if(transformation < 0 || transformation > ANN_LAGANDPREPROC)
+	if(transformation < 0 || transformation > ANN_PREPROC)
 	{
-		fprintf(ERROR_DESC, "Transformation must be an integer >= 0 and <= %d.\n", ANN_LAGANDPREPROC);
+		fprintf(ERROR_DESC, "Transformation must be an integer >= 0 and <= %d.\n", ANN_PREPROC);
 		return ERROR_SYNTAX;	
 	}
 
@@ -1085,7 +1084,7 @@ int main(int argc, char *argv[])
 		
 		train_data = calloc(dataset_size, sizeof(atyp));	
 
-		if(transformation == ANN_LAG || transformation == ANN_LAGANDPREPROC)
+		if(transformation == ANN_LAG)
 		{
 			if(!(fp=fopen(new_dataset, "w+")))
 			{
@@ -1207,7 +1206,7 @@ int main(int argc, char *argv[])
 		printf("-----------------------------------------------------------------\n\n");
 	}
 
-	if(transformation == ANN_PREPROC || transformation == ANN_LAGANDPREPROC)
+	if(transformation == ANN_PREPROC)
 	{
 		if(!(fp=fopen(new_dataset, "w+")))
 		{
