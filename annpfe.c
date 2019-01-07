@@ -290,8 +290,10 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 	{
 		if((x[k] = (atyp*)calloc(n_dim_in * mbs, sizeof(atyp))) == NULL) // each input node takes a (1,n_dim_in) 2D array
 		{
-			while(--k)
+
+			for(--k; k >= 0; --k)
 				free(x[k]), free(y[k]);
+
 			free(x), free(y);
 			fprintf(ERROR_DESC, "Memory error on input vector elements allocation.\n");
 			return ERROR_MEMORY; 
@@ -300,8 +302,10 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 		if((y[k] = (atyp*)calloc(n_dim_out * mbs, sizeof(atyp))) == NULL) // ... where 1 is the mini-batch size
 		{
 			free(x[k]);
-			while(--k)
+
+			for(--k; k >= 0; --k)
 				free(x[k]), free(y[k]);
+
 			free(x), free(y);
 			fprintf(ERROR_DESC, "Memory error on output vector elements allocation.\n");
 			return ERROR_MEMORY;
@@ -312,10 +316,7 @@ static int train(kann_t *net, atyp *train_data, int n_samples, float lr, int ule
 	{
 
 		for (k = 0; k < ulen; ++k)
-		{
-			free(x[k]);
-			free(y[k]);
-		}
+			free(x[k]), free(y[k]);
 
 		free(x), free(y);
 		fprintf(ERROR_DESC, "Memory error on RMSprop's temporary vector.\n");
