@@ -220,7 +220,7 @@ static void normalize_std(atyp *vec, int size, int pitch, int max_pitch, atyp me
 	#pragma unused(unused2)
 	int i;
 
-	for (i = pitch+max_pitch; i+max_pitch < size; i+=max_pitch)
+	for (i = pitch; i < size; i+=max_pitch)
 		vec[i] = vec[i]*var + mean;
 
 }
